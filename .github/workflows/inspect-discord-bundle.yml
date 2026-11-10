@@ -301,6 +301,11 @@ jobs:
             "72705:user_profile_try_it_out_upsell_module"
             "76739:shop_nitro_upsell_banner_module"
             "79987:group_dm_nitro_upsell_banner_module"
+            "4832:gif_autoplay_definition_module"
+            "31548:gif_autoplay_definition_module_alt"
+            "2024:profile_banner_url_module"
+            "8711:profile_banner_url_module_alt"
+            "1418:avatar_decoration_url_module"
           )
 
           for target in "${targets[@]}"; do
