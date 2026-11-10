@@ -145,6 +145,9 @@ jobs:
             "GuildDiscoveryCategoryActionCreators"
             "GuildDiscoveryCategoryStore"
             "Discover"
+            "APPS_HOME"
+            "ApplicationDirectoryTabId"
+            "DirectoryTabType"
           )
 
           for query in "${queries[@]}"; do
@@ -333,6 +336,7 @@ jobs:
             "12088:application_directory_actions_12088"
             "12150:application_directory_store_12150"
             "38673:application_directory_search_38673"
+            "38672:application_directory_tab_module"
           )
 
           for target in "${targets[@]}"; do
