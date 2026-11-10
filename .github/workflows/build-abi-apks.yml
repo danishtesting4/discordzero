@@ -192,7 +192,7 @@ jobs:
               },
           }
           Path(f"build/{abi}-manifest.json").write_text(
-              json.dumps(manifest, indent=2) + "\\n", encoding="utf-8"
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
           )
           print(json.dumps(manifest, indent=2))
           PY
