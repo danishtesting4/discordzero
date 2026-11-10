@@ -1,0 +1,142 @@
+name: Inspect Discord Hermes bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Discord Android version"
+        required: true
+        default: "352.17"
+        type: string
+      mirror:
+        description: "Preferred download mirror"
+        required: true
+        default: "ushie-proxy"
+        type: choice
+        options:
+          - ushie-proxy
+          - vendetta-tracker
+  push:
+    paths:
+      - ".github/workflows/inspect-discord-bundle.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discordzero-hermes-inspection
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Inspect Discord ${{ inputs.version || '352.17' }} Hermes bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      DISCORD_VERSION: ${{ inputs.version || '352.17' }}
+      PREFERRED_MIRROR: ${{ inputs.mirror || 'ushie-proxy' }}
+    steps:
+      - name: Check out DiscordZero
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download Discord base and arm64 splits
+        run: |
+          set -euo pipefail
+          for split in base config.en config.xxhdpi config.arm64_v8a; do
+            python scripts/download_base_apk.py \
+              --version "$DISCORD_VERSION" \
+              --split "$split" \
+              --mirror "$PREFERRED_MIRROR"
+          done
+
+      - name: Download pinned APKEditor
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/REAndroid/APKEditor/releases/download/V1.4.9/APKEditor-1.4.9.jar" \
+            --output "$RUNNER_TEMP/APKEditor-1.4.9.jar"
+          echo "a9cd40df818845456be6d696de6110c89edf4b0a0580cb83438ed6b25a366e67  $RUNNER_TEMP/APKEditor-1.4.9.jar" | sha256sum --check -
+
+      - name: Merge arm64 APK
+        run: |
+          set -euo pipefail
+          java -Xmx6g -jar "$RUNNER_TEMP/APKEditor-1.4.9.jar" \
+            merge -i build -o build/discordzero-inspection-unsigned.apk
+
+      - name: Extract Hermes bundle
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          apk = Path("build/discordzero-inspection-unsigned.apk")
+          out = Path("build/inspection")
+          out.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(apk) as archive:
+              info = archive.getinfo("assets/index.android.bundle")
+              with archive.open(info) as source, (out / "index.android.bundle").open("wb") as target:
+                  while chunk := source.read(1024 * 1024):
+                      target.write(chunk)
+          print(f"Extracted Hermes bundle: {(out / 'index.android.bundle').stat().st_size:,} bytes")
+          PY
+
+      - name: Download and verify Hermes decompiler
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/SymbioticSec/hermes-decomp/releases/download/v0.2.4/hermes-decomp-v0.2.4-linux-x86_64.tar.gz" \
+            --output "$RUNNER_TEMP/hermes-decomp.tar.gz"
+          echo "6e070410432575698657b38d3497f66fd91c0c00f63880d6776703d81d99b5ac  $RUNNER_TEMP/hermes-decomp.tar.gz" | sha256sum --check -
+          mkdir -p "$RUNNER_TEMP/hermes-decomp"
+          tar -xzf "$RUNNER_TEMP/hermes-decomp.tar.gz" -C "$RUNNER_TEMP/hermes-decomp"
+          find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit | grep -q .
+
+      - name: Inspect HBC version, modules, and feature references
+        run: |
+          set -euo pipefail
+          BIN="$(find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit)"
+          BUNDLE="build/inspection/index.android.bundle"
+          mkdir -p build/inspection/report
+
+          "$BIN" info "$BUNDLE" > build/inspection/report/info.txt
+          "$BIN" modules "$BUNDLE" --limit 30000 > build/inspection/report/modules.txt
+          "$BIN" dump "$BUNDLE" --kind cjs-modules > build/inspection/report/cjs-modules.txt
+          "$BIN" dump "$BUNDLE" --kind strings > build/inspection/report/strings.txt
+
+          for query in Nitro Premium Discovery GIF autoplay preload decoration avatarDecoration banner Upsell; do
+            "$BIN" xref "$BUNDLE" --query "$query" \
+              > "build/inspection/report/xref-$query.txt"
+          done
+
+          {
+            echo "Discord version: $DISCORD_VERSION"
+            echo "Preferred mirror: $PREFERRED_MIRROR"
+            echo
+            cat build/inspection/report/info.txt
+            echo
+            echo "Module rows: $(wc -l < build/inspection/report/modules.txt)"
+            echo "String rows: $(wc -l < build/inspection/report/strings.txt)"
+            echo "CJS module rows: $(wc -l < build/inspection/report/cjs-modules.txt)"
+          } > build/inspection/report/summary.txt
+
+      - name: Upload inspection report
+        uses: actions/upload-artifact@v4
+        with:
+          name: discordzero-${{ inputs.version || '352.17' }}-hermes-inspection
+          path: build/inspection/report/
+          if-no-files-found: error
+          retention-days: 7
