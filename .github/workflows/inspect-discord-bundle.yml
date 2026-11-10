@@ -8,19 +8,17 @@ on:
         required: true
         default: "352.17"
         type: string
-      mirror:
-        description: "Preferred download mirror"
+      source_run_id:
+        description: "Successful per-ABI build run containing the arm64 APK"
         required: true
-        default: "ushie-proxy"
-        type: choice
-        options:
-          - ushie-proxy
-          - vendetta-tracker
+        default: "42805321472"
+        type: string
   push:
     paths:
       - ".github/workflows/inspect-discord-bundle.yml"
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -31,68 +29,33 @@ jobs:
   inspect:
     name: Inspect Discord ${{ inputs.version || '352.17' }} Hermes bundle
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       DISCORD_VERSION: ${{ inputs.version || '352.17' }}
-      PREFERRED_MIRROR: ${{ inputs.mirror || 'ushie-proxy' }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id || '42805321472' }}
     steps:
       - name: Check out DiscordZero
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download the existing arm64 APK artifact
+        uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Download Discord base and arm64 splits
-        run: |
-          set -euo pipefail
-          for split in base config.en config.xxhdpi config.arm64_v8a; do
-            python scripts/download_base_apk.py \
-              --version "$DISCORD_VERSION" \
-              --split "$split" \
-              --mirror "$PREFERRED_MIRROR"
-          done
-
-      - name: Download pinned APKEditor
-        run: |
-          set -euo pipefail
-          curl --fail --location --retry 3 \
-            "https://github.com/REAndroid/APKEditor/releases/download/V1.4.9/APKEditor-1.4.9.jar" \
-            --output "$RUNNER_TEMP/APKEditor-1.4.9.jar"
-          echo "a9cd40df818845456be6d696de6110c89edf4b0a0580cb83438ed6b25a366e67  $RUNNER_TEMP/APKEditor-1.4.9.jar" | sha256sum --check -
-
-      - name: Merge arm64 APK
-        run: |
-          set -euo pipefail
-          java -Xmx6g -jar "$RUNNER_TEMP/APKEditor-1.4.9.jar" \
-            merge -i build -o build/discordzero-inspection-unsigned.apk
+          name: discordzero-${{ inputs.version || '352.17' }}-arm64-v8a
+          path: build/source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id || '42805321472' }}
 
       - name: Extract Hermes bundle
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import zipfile
-          from pathlib import Path
-
-          apk = Path("build/discordzero-inspection-unsigned.apk")
-          out = Path("build/inspection")
-          out.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(apk) as archive:
-              info = archive.getinfo("assets/index.android.bundle")
-              with archive.open(info) as source, (out / "index.android.bundle").open("wb") as target:
-                  while chunk := source.read(1024 * 1024):
-                      target.write(chunk)
-          print(f"Extracted Hermes bundle: {(out / 'index.android.bundle').stat().st_size:,} bytes")
-          PY
+          APK="build/source/discordzero-arm64-v8a.apk"
+          test -s "$APK"
+          mkdir -p build/inspection
+          unzip -p "$APK" assets/index.android.bundle > build/inspection/index.android.bundle
+          test -s build/inspection/index.android.bundle
+          echo "APK: $(stat -c '%s bytes' "$APK")"
+          echo "Hermes bundle: $(stat -c '%s bytes' build/inspection/index.android.bundle)"
 
       - name: Download and verify Hermes decompiler
         run: |
@@ -188,7 +151,7 @@ jobs:
 
           {
             echo "Discord version: $DISCORD_VERSION"
-            echo "Preferred mirror: $PREFERRED_MIRROR"
+            echo "Source build run: $SOURCE_RUN_ID"
             echo
             cat "$REPORT/info.txt"
             echo
