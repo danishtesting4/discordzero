@@ -72,7 +72,7 @@ jobs:
       - name: Install Reseam CLI and generate a temporary bundle key
         run: |
           set -euo pipefail
-          version="$(sed -n 's/.*id("app.reseam.workspace") version "\\(.*\\)".*/\\1/p' patches/settings.gradle.kts)"
+          version="$(awk -F'"' '/app.reseam.workspace/ {print $4}' patches/settings.gradle.kts)"
           test -n "$version"
           curl --fail --location --retry 3 \
             "https://cdn.reseam.app/engine/v$version/reseam-linux-x64" \
