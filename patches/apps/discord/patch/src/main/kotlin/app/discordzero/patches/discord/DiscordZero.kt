@@ -1,14 +1,11 @@
 package app.discordzero.patches.discord
 
-import app.reseam.patch.ExtJsModule
+import app.reseam.discord.bindings.Features
 import app.reseam.patch.after
 import app.reseam.patch.before
 import app.reseam.patch.function
 import app.reseam.patch.patch
-
-private object Features : ExtJsModule("discord-features") {
-    val forceStaticAvatarDecoration by export()
-}
+import app.reseam.patch.replace
 
 private val setPrefersReducedMotion = function {
     name("setPrefersReducedMotion")
@@ -79,7 +76,9 @@ val reduceAutomaticAnimations = patch("Reduce automatic animations") {
             param(0).assign(bool(true))
         }
 
-        getAvatarDecorationURL.wrap(Features.forceStaticAvatarDecoration)
+        getAvatarDecorationURL.before {
+            param(0).assign(Features.withStaticAvatarDecoration(param(0)))
+        }
     }
 }
 
@@ -96,11 +95,28 @@ val removeNitroPromotions = patch("Remove Nitro promotions") {
             result.assign(bool(false))
         }
 
-        nitroUpsellButton.alwaysReturnNull()
-        premiumUpsellAlert.alwaysReturnNull()
-        nitroUpsell.alwaysReturnNull()
-        nitroFileUploadUpsellPromoSheet.alwaysReturnNull()
-        premiumTrialOfferActionSheetContent.alwaysReturnNull()
-        premiumDiscountOfferActionSheetContent.alwaysReturnNull()
+        nitroUpsellButton.replace {
+            returnNull()
+        }
+
+        premiumUpsellAlert.replace {
+            returnNull()
+        }
+
+        nitroUpsell.replace {
+            returnNull()
+        }
+
+        nitroFileUploadUpsellPromoSheet.replace {
+            returnNull()
+        }
+
+        premiumTrialOfferActionSheetContent.replace {
+            returnNull()
+        }
+
+        premiumDiscountOfferActionSheetContent.replace {
+            returnNull()
+        }
     }
 }
