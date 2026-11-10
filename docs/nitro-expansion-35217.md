@@ -53,7 +53,18 @@ Prior validation (per `docs/unbloat-research.md`): `removeNitroPromotions` appli
 
 ## Reproducibility / inspection workflow changes
 - Extended `.github/workflows/inspect-discord-bundle.yml` xref queries for Nitro file-upload/offer tracing: `useNitroFileUploadRolloutEnabled`, `useNonNitroFileUploadMarketingEnabled`, `getNitroFileUploadRolloutCopy`, `NitroFileUploadUpsellPromoSheet`, `PremiumTrialOfferActionSheetContent`, `PremiumDiscountOfferActionSheetContent`, `PremiumTrialOfferActionSheet`, `PremiumDiscountOfferActionSheet`.
-- **Inspect run triggered:** _TBD in final report (see workflow runs)._
+- Extended inspect decompile targets for candidate module factories/related functions: `18456`, `17093`, `18435`, `17092`, `18434`, `18461`, `5065`, `68181/68182`, `80861/80862`.
+- Inspect runs: `42825621961` (success, Nitro xref evidence collected), `42826462840` (in progress at time of latest edit; pending module-factory decompiles).
+
+## New evidence from inspect 42825621961
+- `xref-getNitroFileUploadRolloutCopy.txt`: 7 refs — `5065` export/definition candidate, `68181/68182` FractionalNitroPreview, `76221/76222`, `80833/80834` (offer sheet components consume rollout copy).
+- `xref-NitroFileUploadUpsellPromoSheet.txt`: **1 ref** — `18456` (LoadConstStringLongIndex at 0x0115). Strong single-site module/registration candidate; decompile pending.
+- `xref-PremiumTrialOfferActionSheetContent.txt`: **1 ref** — `17093` (LoadConstStringLongIndex at 0x013a). Single-site candidate; decompile pending.
+- `xref-PremiumDiscountOfferActionSheetContent.txt`: **1 ref** — `18435` (LoadConstStringLongIndex at 0x013a). Single-site candidate; decompile pending.
+- `xref-PremiumTrialOfferActionSheet.txt`: refs in `17092/17093/18461`, `80861/80862` (`useMainViewTooltipActionSheetMap`), `129085/129086` press handlers.
+- `xref-PremiumDiscountOfferActionSheet.txt`: refs in `18434/18435`.
+- `xref-useNitroFileUploadRolloutEnabled.txt`, `xref-useNonNitroFileUploadMarketingEnabled.txt`, `xref-useNitroFileUploadAnnouncementEligible.txt`, `xref-useNitroFileUploadUpsellEligible.txt`: not present in extracted report (possible filename/extraction mismatch; hook module-factory/export evidence still unresolved).
+- Interpretation: single-string xrefs for promo/offer content components suggest dedicated module factories/registrations, but **owning module path, export symbol, param count, uniqueness, and callers must be confirmed from decompilation before patching**. No implementation added yet on this evidence alone.
 
 ## Changes implemented
 - **None in this pass.** No new Reseam patches added to `DiscordZero.kt` / `Features` JS because no Priority 2 candidate met the required evidence bar (unique owning module factory + embedded source path + export + caller/context proof of promo-only safety, including upload/subscription/account non-regression).
