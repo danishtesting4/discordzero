@@ -95,6 +95,17 @@ jobs:
             "useNitroFileUploadUpsellEligible"
             "PREMIUM_MARKETING_SURFACE_REACHED_BOTTOM"
             "guild-upsell-list"
+            "GlobalDiscoveryServers"
+            "GlobalDiscoveryApps"
+            "GuildsBarCreateJoinButton"
+            "GuildDirectory"
+            "GuildDirectorySearch"
+            "global_discovery_servers"
+            "global_discovery_apps"
+            "GUILD_DISCOVERY"
+            "DISCOVERABLE_GUILD_SERVER"
+            "GuildDiscoveryPreviewElement"
+            "Directory"
           )
 
           for query in "${queries[@]}"; do
