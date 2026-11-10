@@ -1,7 +1,6 @@
 package app.discordzero.patches.discord
 
 import app.reseam.discord.bindings.Features
-import app.reseam.patch.after
 import app.reseam.patch.before
 import app.reseam.patch.function
 import app.reseam.patch.patch
@@ -14,16 +13,6 @@ private val setPrefersReducedMotion = function {
 
 private val getAvatarDecorationURL = function {
     strings("canAnimate", "ANIMATED", "STATIC")
-    paramCount(1)
-}
-
-private val useNitroFileUploadAnnouncementEligible = function {
-    strings("useNitroFileUploadRolloutEnabled")
-    paramCount(1)
-}
-
-private val useNitroFileUploadUpsellEligible = function {
-    strings("useNonNitroFileUploadMarketingEnabled")
     paramCount(1)
 }
 
@@ -92,14 +81,6 @@ val removeNitroPromotions = patch("Remove Nitro promotions") {
     compatibleWith("com.discord")
 
     execute {
-        useNitroFileUploadAnnouncementEligible.after {
-            result.assign(bool(false))
-        }
-
-        useNitroFileUploadUpsellEligible.after {
-            result.assign(bool(false))
-        }
-
         nitroUpsellButton.replace {
             returnNull()
         }
