@@ -30,11 +30,18 @@ def normalize_locale(locale: str) -> str:
 
 
 def locale_from_cache_name(filename: str) -> str:
-    """Extract the locale token immediately before 'messages' in a cache name."""
-    matches = LOCALE_PATTERN.findall(Path(filename).name)
-    if not matches:
+    """Extract the locale token immediately before the locale's 'messages' marker."""
+    name = Path(filename).name
+    suffix_start = name.rfind("compiledmessages")
+    marker = name.rfind("messages", 0, suffix_start)
+    if suffix_start < 0 or marker < 0:
         raise ValueError(f"Cannot identify locale in cache resource: {filename}")
-    return matches[-1].lower()
+
+    prefix = name[:marker]
+    locale = prefix.rsplit("_", 1)[-1]
+    if not locale or re.fullmatch(r"[A-Za-z0-9]+", locale) is None:
+        raise ValueError(f"Cannot identify locale in cache resource: {filename}")
+    return locale.lower()
 
 
 def is_locale_cache(filename: str) -> bool:
