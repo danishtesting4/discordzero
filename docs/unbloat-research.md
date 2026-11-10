@@ -63,3 +63,12 @@ Planned build flow:
 `Download splits → Merge ABI → Reseam patch → Align/sign → Verify → Upload`
 
 Do not publish stock or partially patched APKs as DiscordZero releases.
+
+## Patch validation notes
+
+- The Reseam bundle builds successfully with engine/plugin 0.39.1 and generated Hermes extension bindings.
+- The `createMessageContent` target resolves in Discord 352.17. The test run reached the later Nitro patch and reported no failure for the chat-media patch; it is therefore the first validated code target.
+- The chat-media extension copies the message props and sets `options.gifAutoPlay=false` and `options.animateEmoji=false`, leaving the original props unmodified.
+- The initial `setPrefersReducedMotion` target did not resolve in Reseam's function matcher, so it was removed rather than shipping an unverified hook.
+- `PremiumFeatureUpsellPill` has two same-named React Compiler/fallback functions in this bundle. Reseam's `function` query requires exactly one match, so this target cannot be patched with the current broad selector. Inspect the parent picker surfaces or a shared helper instead.
+- No partially patched APK has been published. The test workflow is intentionally strict: if a selected patch fails, it produces no APK.
