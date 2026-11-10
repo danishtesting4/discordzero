@@ -108,6 +108,37 @@ jobs:
             --output "$OUTPUT"
           test -s "$OUTPUT"
 
+      - name: Trim unused locale caches
+        run: |
+          set -euo pipefail
+          python scripts/trim_locale_caches.py \
+            --input "build/discordzero-$DISCORD_VERSION-arm64-v8a-patched.apk" \
+            --output "build/discordzero-$DISCORD_VERSION-arm64-v8a-unsigned.apk" \
+            --keep-locales enGB,id \
+            --summary build/locale-trim-summary.json
+          cat build/locale-trim-summary.json
+
+      - name: Align and sign trimmed APK
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/discordzero-temporary.jks" \
+            -storepass discordzero-temporary \
+            -keypass discordzero-temporary \
+            -alias discordzero \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=DiscordZero Temporary Build"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 \
+            "build/discordzero-$DISCORD_VERSION-arm64-v8a-unsigned.apk" \
+            "build/discordzero-$DISCORD_VERSION-arm64-v8a-aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$RUNNER_TEMP/discordzero-temporary.jks" \
+            --ks-pass pass:discordzero-temporary \
+            --key-pass pass:discordzero-temporary \
+            --ks-key-alias discordzero \
+            --out "build/discordzero-$DISCORD_VERSION-arm64-v8a-unbloat-test.apk" \
+            "build/discordzero-$DISCORD_VERSION-arm64-v8a-aligned.apk"
+
       - name: Verify patched APK
         run: |
           set -euo pipefail
@@ -122,6 +153,7 @@ jobs:
           name: discordzero-${{ inputs.version || '352.17' }}-arm64-unbloat-test
           path: |
             build/discordzero-${{ inputs.version || '352.17' }}-arm64-v8a-unbloat-test.apk
+            build/locale-trim-summary.json
             patches/build/reseam/discordzero.reseam
           if-no-files-found: error
           retention-days: 7
