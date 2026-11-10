@@ -56,7 +56,9 @@ jobs:
             exit 1
           fi
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
           "$SDKMANAGER" --install "build-tools;35.0.0"
           test -x "$ANDROID_HOME/build-tools/35.0.0/zipalign"
           test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
