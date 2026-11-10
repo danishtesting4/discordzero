@@ -1,10 +1,10 @@
 package app.discordzero.patches.discord
 
 import app.reseam.discord.bindings.Features
+import app.reseam.patch.after
 import app.reseam.patch.before
 import app.reseam.patch.function
 import app.reseam.patch.patch
-import app.reseam.patch.replace
 
 private val createMessageContent = function {
     name("createMessageContent")
@@ -12,22 +12,29 @@ private val createMessageContent = function {
     paramCount(1)
 }
 
-private val premiumFeatureUpsellPill = function {
-    name("PremiumFeatureUpsellPill")
-    strings("native.PremiumFeatureUpsell", "featureName", "ShinyButton")
-    paramCount(1)
+private val premiumFeatureUpsellModule = function {
+    strings("modules/premium/roadblocks/native/views/PremiumFeatureUpsell.tsx")
+    paramCount(7)
 }
 
-private val premiumExpressionPickerSearchUpsell = function {
-    name("PremiumExpressionPickerSearchUpsell")
-    strings("ctaText", "PressableOpacity", "upsell")
-    paramCount(1)
+private val premiumExpressionPickerFeatureUpsellModule = function {
+    strings("modules/premium/roadblocks/native/views/PremiumExpressionPickerFeatureUpsell.tsx")
+    paramCount(7)
 }
 
-private val premiumFeatureUpsell = function {
-    name("PremiumFeatureUpsell")
-    strings("featureName", "useAnalyticsContext", "shouldShow")
-    paramCount(1)
+private val premiumExpressionPickerSearchUpsellModule = function {
+    strings("modules/premium/roadblocks/native/views/PremiumExpressionPickerSearchUpsell.tsx")
+    paramCount(7)
+}
+
+private val emojiPickerPremiumSearchUpsellModule = function {
+    strings("modules/emoji_picker/native/components/EmojiPickerPremiumSearchUpsell.tsx")
+    paramCount(7)
+}
+
+private val stickerPickerPremiumSearchUpsellModule = function {
+    strings("modules/stickers/native/StickerPickerPremiumSearchUpsell.tsx")
+    paramCount(7)
 }
 
 val staticChatMedia = patch("Disable automatic chat media animation") {
@@ -42,22 +49,28 @@ val staticChatMedia = patch("Disable automatic chat media animation") {
 }
 
 val removeNitroPromotions = patch("Remove Nitro promotions") {
-    description("Hides Nitro upsell buttons and promotional surfaces in the emoji and sticker pickers.")
+    description("Removes Nitro promotion components from the emoji and sticker pickers.")
     compatibleWith("com.discord")
 
     execute {
-        premiumFeatureUpsellPill.replace {
-            returnNull()
+        premiumFeatureUpsellModule.after {
+            param(5).assign(Features.hideExport(param(5), "default"))
         }
 
-        premiumExpressionPickerSearchUpsell.replace {
-            returnNull()
+        premiumExpressionPickerFeatureUpsellModule.after {
+            param(5).assign(Features.hideExport(param(5), "default"))
         }
 
-        premiumFeatureUpsell.before {
-            whenTrue(Features.isPickerUpsell(param(0))) {
-                returnNull()
-            }
+        premiumExpressionPickerSearchUpsellModule.after {
+            param(5).assign(Features.hideExport(param(5), "default"))
+        }
+
+        emojiPickerPremiumSearchUpsellModule.after {
+            param(5).assign(Features.hideExport(param(5), "PremiumSearchUpsell"))
+        }
+
+        stickerPickerPremiumSearchUpsellModule.after {
+            param(5).assign(Features.hideExport(param(5), "default"))
         }
     }
 }
