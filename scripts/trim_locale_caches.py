@@ -19,7 +19,6 @@ from typing import Iterable
 
 CACHE_PREFIX = "res/raw/cache_intl_"
 CACHE_SUFFIX = "compiledmessages.jsona"
-LOCALE_PATTERN = re.compile(r"_([A-Za-z0-9]+?)messages")
 DEFAULT_KEEP_LOCALES = frozenset({"engb", "id"})
 SIGNATURE_SUFFIXES = (".SF", ".RSA", ".DSA", ".EC")
 
