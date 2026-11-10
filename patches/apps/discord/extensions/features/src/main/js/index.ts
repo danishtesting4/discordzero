@@ -102,3 +102,49 @@ export function disableDiscoveryManager(exports: any) {
 
     return exports;
 }
+
+export function redirectDiscoveryRoutes(exports: any) {
+    if (exports == null || typeof exports !== "object") {
+        return exports;
+    }
+
+    const routes = exports.Routes;
+    if (routes == null || typeof routes !== "object") {
+        return exports;
+    }
+
+    const home = "/channels/@me";
+    const fixedRoutes = new Set([
+        "GLOBAL_DISCOVERY",
+        "GLOBAL_DISCOVERY_SERVERS",
+        "GLOBAL_DISCOVERY_APPS",
+        "GLOBAL_DISCOVERY_APPS_SEARCH",
+        "APPLICATION_DIRECTORY",
+        "APPLICATION_DIRECTORY_SEARCH",
+    ]);
+    const dynamicRoutes = new Set([
+        "GLOBAL_DISCOVERY_APPS_CATEGORY",
+        "GLOBAL_DISCOVERY_APPS_PROFILE",
+        "GLOBAL_DISCOVERY_APPS_PROFILE_SECTION",
+        "GLOBAL_DISCOVERY_APPS_PROFILE_STORE_SKU",
+        "APPLICATION_DIRECTORY_PROFILE",
+        "APPLICATION_DIRECTORY_PROFILE_SECTION",
+        "APPLICATION_DIRECTORY_PROFILE_STORE_SKU",
+    ]);
+
+    exports.Routes = new Proxy(routes, {
+        get(target, property, receiver) {
+            if (typeof property === "string" && fixedRoutes.has(property)) {
+                return home;
+            }
+            if (typeof property === "string" && dynamicRoutes.has(property)) {
+                return function () {
+                    return home;
+                };
+            }
+            return Reflect.get(target, property, receiver);
+        },
+    });
+
+    return exports;
+}
