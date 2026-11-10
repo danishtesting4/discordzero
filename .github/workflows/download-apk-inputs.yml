@@ -1,0 +1,119 @@
+name: Download Discord APK inputs
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Discord Android version (latest stable checked: 352.17)"
+        required: true
+        default: "352.17"
+        type: string
+      mirror:
+        description: "Preferred download mirror"
+        required: true
+        default: "ushie-proxy"
+        type: choice
+        options:
+          - ushie-proxy
+          - vendetta-tracker
+      abi:
+        description: "Native library ABI split to download"
+        required: true
+        default: "arm64_v8a"
+        type: choice
+        options:
+          - arm64_v8a
+          - armeabi_v7a
+          - x86_64
+          - x86
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-apk-download
+  cancel-in-progress: false
+
+jobs:
+  download:
+    name: Download Discord ${{ inputs.version }} inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out DiscordZero
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download and validate APK splits
+        env:
+          DISCORD_VERSION: ${{ inputs.version }}
+          PREFERRED_MIRROR: ${{ inputs.mirror }}
+          ANDROID_ABI: ${{ inputs.abi }}
+        run: |
+          set -euo pipefail
+
+          python scripts/download_base_apk.py \
+            --version "$DISCORD_VERSION" \
+            --split base \
+            --mirror "$PREFERRED_MIRROR"
+
+          python scripts/download_base_apk.py \
+            --version "$DISCORD_VERSION" \
+            --split config.en \
+            --mirror "$PREFERRED_MIRROR"
+
+          python scripts/download_base_apk.py \
+            --version "$DISCORD_VERSION" \
+            --split "config.$ANDROID_ABI" \
+            --mirror "$PREFERRED_MIRROR"
+
+          python scripts/download_base_apk.py \
+            --version "$DISCORD_VERSION" \
+            --split config.xxhdpi \
+            --mirror "$PREFERRED_MIRROR"
+
+      - name: Write input manifest
+        env:
+          DISCORD_VERSION: ${{ inputs.version }}
+          PREFERRED_MIRROR: ${{ inputs.mirror }}
+          ANDROID_ABI: ${{ inputs.abi }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ["DISCORD_VERSION"]
+          files = sorted(Path("build").glob("*.apk"))
+          manifest = {
+              "discord_version": version,
+              "preferred_mirror": os.environ["PREFERRED_MIRROR"],
+              "abi": os.environ["ANDROID_ABI"],
+              "files": [
+                  {
+                      "name": path.name,
+                      "size": path.stat().st_size,
+                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                  }
+                  for path in files
+              ],
+          }
+          Path("build/input-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Upload original APK inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-${{ inputs.version }}-${{ inputs.abi }}-inputs
+          path: build/
+          if-no-files-found: error
+          retention-days: 7
