@@ -16,6 +16,7 @@ on:
   push:
     paths:
       - "patches/**"
+      - "scripts/trim_locale_caches.py"
       - ".github/workflows/test-unbloat.yml"
 
 permissions:
@@ -99,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           APK="build/source/discordzero-arm64-v8a.apk"
-          OUTPUT="build/discordzero-$DISCORD_VERSION-arm64-v8a-unbloat-test.apk"
+          OUTPUT="build/discordzero-$DISCORD_VERSION-arm64-v8a-patched.apk"
           test -s "$APK"
           "$RESEAM_BIN" patch "$APK" \
             --bundle patches/build/reseam/discordzero.reseam \
