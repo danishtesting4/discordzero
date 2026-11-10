@@ -81,3 +81,14 @@ Do not publish stock or partially patched APKs as DiscordZero releases.
 - The module-export approach avoids the duplicate React Compiler/fallback function match: patch the seven-argument Metro module factory by its embedded source path, then replace the relevant export on `param(5)` (the module exports object).
 - Original arm64 APK: 201,231,604 bytes. Patched test APK: 200,986,267 bytes. This small difference is signing/packaging overhead, **not meaningful storage trimming**.
 - The Hermes bundle grew from 70,404,633 to 71,062,701 bytes because the patch extension is embedded. Resource and locale trimming has not been implemented yet.
+
+## Locale trimming validation
+
+- The Python checks pass for `scripts/trim_locale_caches.py`.
+- The script parses each `res/raw/cache_intl_*` compiled-message cache as JSON, keeps `enGB` and `id`, and replaces non-kept non-empty locale objects with `{}`. It preserves resource names/IDs, `resources.arsc`, and `AndroidManifest.xml`; the APK is re-aligned and re-signed afterward.
+- On Discord 352.17 arm64, it processed 2,097 cache entries and replaced 1,187 non-empty entries across 29 non-kept locales.
+- Compressed locale resources fell from 7,141,550 bytes to 4,498 bytes, saving 7,137,052 bytes.
+- Successful integrated test: run `42815156797`, artifact `discordzero-352.17-arm64-unbloat-test` (expires 2026-11-17).
+- Final test APK size: 194,735,426 bytes, versus 201,231,604 bytes for the original arm64 APK — 6,496,178 bytes smaller overall after patching, ZIP rewriting, alignment and signing.
+- The build log confirms `staticChatMedia`, `staticProfileMedia`, and `removeNitroPromotions` all applied successfully.
+- Locale tradeoff: English US remains the app's base fallback, English UK and Indonesian caches are retained; other languages fall back to English.
