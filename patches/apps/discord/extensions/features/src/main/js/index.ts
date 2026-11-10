@@ -78,3 +78,27 @@ export function disableGifAutoPlay(exports: any) {
 
     return exports;
 }
+
+export function disableDiscoveryManager(exports: any) {
+    if (exports == null || typeof exports !== "object") {
+        return exports;
+    }
+
+    const manager = exports.default;
+    if (manager == null || typeof manager !== "object") {
+        return exports;
+    }
+
+    manager.isFetchEnabled = false;
+    manager.handleConnectionOpen = function () {};
+    if (manager.actions != null && typeof manager.actions === "object") {
+        manager.actions.POST_CONNECTION_OPEN = function () {};
+    }
+    manager.fetchFeaturedGuilds = async function* () {};
+    manager.fetchCategoryFeaturedGuilds = async function* () {};
+    if (manager.queue != null && typeof manager.queue.clear === "function") {
+        manager.queue.clear();
+    }
+
+    return exports;
+}
