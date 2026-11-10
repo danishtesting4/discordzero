@@ -105,7 +105,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/hermes-decomp.tar.gz" -C "$RUNNER_TEMP/hermes-decomp"
           find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit | grep -q .
 
-      - name: Inspect HBC version and feature references
+      - name: Inspect HBC version, feature references, and target functions
         run: |
           set -euo pipefail
           BIN="$(find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit)"
@@ -128,8 +128,8 @@ jobs:
             "Upsell"
             "getUserTrialOffer"
             "getUserDiscountOffer"
-            "getNitroFileUploadRolloutEnabled"
-            "useNitroFileUploadRolloutEnabled"
+            "useNitroFileUploadAnnouncementEligible"
+            "useNitroFileUploadUpsellEligible"
             "PREMIUM_MARKETING_SURFACE_REACHED_BOTTOM"
             "guild-upsell-list"
           )
@@ -148,6 +148,44 @@ jobs:
             fi
           done
 
+          targets=(
+            "54776:use_auto_play"
+            "71773:set_prefers_reduced_motion"
+            "80867:nitro_file_upload_announcement_eligible"
+            "80869:nitro_file_upload_upsell_eligible"
+            "68204:nitro_upsell"
+            "53877:nitro_upsell_button"
+            "52970:premium_upsell_alert"
+            "80858:nitro_file_upload_upsell_promo_sheet"
+            "76221:premium_trial_offer_sheet"
+            "80833:premium_discount_offer_sheet"
+            "48469:user_profile_banner"
+            "48251:preload_user_banner_image"
+            "48142:use_user_avatar_decoration"
+            "25837:get_avatar_decoration_url"
+            "25773:avatar_decoration"
+            "48497:header_avatar"
+            "66894:user_avatar"
+            "70989:avatar"
+            "64670:application_command_discovery"
+            "84048:global_discovery_banner_title"
+            "84053:discoverable_guild_server"
+          )
+
+          for target in "${targets[@]}"; do
+            id="${target%%:*}"
+            label="${target#*:}"
+            if timeout 90 "$BIN" decompile "$BUNDLE" --function "$id" \
+              > "$REPORT/function-$id-$label.js" \
+              2> "$REPORT/function-$id-$label.log"; then
+              :
+            else
+              status=$?
+              echo "Decompile failed or timed out (status $status) for function $id ($label)." \
+                > "$REPORT/function-$id-$label.error"
+            fi
+          done
+
           {
             echo "Discord version: $DISCORD_VERSION"
             echo "Preferred mirror: $PREFERRED_MIRROR"
@@ -155,12 +193,13 @@ jobs:
             cat "$REPORT/info.txt"
             echo
             echo "Reference reports: $(find "$REPORT" -name 'xref-*.txt' | wc -l)"
+            echo "Function decompilations: $(find "$REPORT" -name 'function-*.js' | wc -l)"
           } > "$REPORT/summary.txt"
 
       - name: Upload inspection report
         uses: actions/upload-artifact@v4
         with:
-          name: discordzero-${{ inputs.version || '352.17' }}-hermes-xref
+          name: discordzero-${{ inputs.version || '352.17' }}-hermes-analysis
           path: build/inspection/report/
           if-no-files-found: error
           retention-days: 7
