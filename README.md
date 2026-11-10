@@ -6,7 +6,7 @@ A performance-focused Valenced-based Discord fork.
 
 DiscordZero includes a standalone downloader for the original Discord APK splits used as inputs to later patching and unbloating steps.
 
-The latest stable Android version checked for this setup is **352.17**. The version is configurable when manually starting the GitHub Actions workflow.
+The latest stable Android version checked for this setup is **352.17**. Enter the normal display version in Actions; the downloader converts it to the tracker's numeric version code (for example, `352.17` becomes `352017`) before requesting APK splits.
 
 The mirror order matches the current Valenced Manager source:
 1. `https://proxy.vd.ushie.dev` (default mirror)
