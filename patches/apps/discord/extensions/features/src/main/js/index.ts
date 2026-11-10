@@ -1,13 +1,22 @@
 const PICKER_FEATURES = new Set(["emojisEverywhere", "stickersEverywhere"]);
 
-export function withStaticAvatarDecoration(options: any) {
+export function withStaticChatMediaOptions(props: any) {
+    if (props == null || typeof props !== "object") {
+        return props;
+    }
+
+    const options = props.options;
     if (options == null || typeof options !== "object") {
-        return options;
+        return props;
     }
 
     return {
-        ...options,
-        canAnimate: false,
+        ...props,
+        options: {
+            ...options,
+            gifAutoPlay: false,
+            animateEmoji: false,
+        },
     };
 }
 
