@@ -60,3 +60,21 @@ export function forceStaticAvatarDecoration(exports: any) {
 
     return exports;
 }
+
+export function disableGifAutoPlay(exports: any) {
+    if (exports == null || typeof exports !== "object") {
+        return exports;
+    }
+
+    const setting = exports.GifAutoPlay;
+    if (setting != null && typeof setting === "object") {
+        setting.useSetting = function () {
+            return false;
+        };
+        setting.getSetting = function () {
+            return false;
+        };
+    }
+
+    return exports;
+}
