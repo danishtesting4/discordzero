@@ -56,27 +56,34 @@ Prior validation (per `docs/unbloat-research.md`): `removeNitroPromotions` appli
 - Extended inspect decompile targets for candidate module factories/related functions: `18456`, `17093`, `18435`, `17092`, `18434`, `18461`, `5065`, `68181/68182`, `80861/80862`.
 - Inspect runs: `42825621961` (success, Nitro xref evidence collected), `42826462840` (in progress at time of latest edit; pending module-factory decompiles).
 
-## New evidence from inspect 42825621961
-- `xref-getNitroFileUploadRolloutCopy.txt`: 7 refs — `5065` export/definition candidate, `68181/68182` FractionalNitroPreview, `76221/76222`, `80833/80834` (offer sheet components consume rollout copy).
-- `xref-NitroFileUploadUpsellPromoSheet.txt`: **1 ref** — `18456` (LoadConstStringLongIndex at 0x0115). Strong single-site module/registration candidate; decompile pending.
-- `xref-PremiumTrialOfferActionSheetContent.txt`: **1 ref** — `17093` (LoadConstStringLongIndex at 0x013a). Single-site candidate; decompile pending.
-- `xref-PremiumDiscountOfferActionSheetContent.txt`: **1 ref** — `18435` (LoadConstStringLongIndex at 0x013a). Single-site candidate; decompile pending.
-- `xref-PremiumTrialOfferActionSheet.txt`: refs in `17092/17093/18461`, `80861/80862` (`useMainViewTooltipActionSheetMap`), `129085/129086` press handlers.
-- `xref-PremiumDiscountOfferActionSheet.txt`: refs in `18434/18435`.
-- `xref-useNitroFileUploadRolloutEnabled.txt`, `xref-useNonNitroFileUploadMarketingEnabled.txt`, `xref-useNitroFileUploadAnnouncementEligible.txt`, `xref-useNitroFileUploadUpsellEligible.txt`: not present in extracted report (possible filename/extraction mismatch; hook module-factory/export evidence still unresolved).
-- Interpretation: single-string xrefs for promo/offer content components suggest dedicated module factories/registrations, but **owning module path, export symbol, param count, uniqueness, and callers must be confirmed from decompilation before patching**. No implementation added yet on this evidence alone.
+## Evidence from inspect runs 42825621961 / 42826462840
+- `xref-getNitroFileUploadRolloutCopy.txt` (42825621961): 7 refs — `5065`, `68181/68182` FractionalNitroPreview, `76221/76222`, `80833/80834`.
+- `xref-NitroFileUploadUpsellPromoSheet.txt`: **1 ref** → function `18456` (LoadConstStringLongIndex @ 0x0115). Decomp (42826462840) confirms unique 7-param Metro module factory `modules/premium/file_upload/native/NitroFileUploadUpsellPromoSheet.tsx` exporting `default` component (React Compiler/fallback pair `F80858`/`F80859`, component bodies `80858/80859` in prior decomp). Promo sheet navigates to Premium settings on CTA and tracks dismiss/take-action; not upload enforcement logic.
+- `xref-PremiumTrialOfferActionSheetContent.txt`: **1 ref** → function `17093` (content module factory `modules/premium/native/trials/PremiumTrialOfferActionSheetContent.tsx`, memoized default from `F76221`/`F76222`). Not patched directly.
+- `xref-PremiumDiscountOfferActionSheetContent.txt`: **1 ref** → function `18435` (content module factory `modules/premium/native/discounts/PremiumDiscountOfferActionSheetContent.tsx`, memoized default from `F80833`/`F80834`). Not patched directly.
+- `xref-PremiumTrialOfferActionSheet.txt`: refs in `17092/17093/18461`, `80861/80862` (`useMainViewTooltipActionSheetMap`), `129085/129086` press handlers. Decomp of `17092` confirms module factory `modules/premium/native/trials/PremiumTrialOfferActionSheet.tsx` exporting `default` wrapper action sheet (`F76220`, body `76220` renders BottomSheet with trial offer content); `18461` is kill-switch experiment module (`PremiumTrialOfferActionSheetKillSwitchExperiment`), referenced by 80861/80862.
+- `xref-PremiumDiscountOfferActionSheet.txt`: refs in `18434/18435`. Decomp of `18434` confirms module factory `modules/premium/native/discounts/PremiumDiscountOfferActionSheet.tsx` exporting `default` wrapper action sheet (`F80832`).
+- `xref-useNitroFileUploadRolloutEnabled.txt`, `xref-useNonNitroFileUploadMarketingEnabled.txt`, `xref-useNitroFileUploadAnnouncementEligible.txt`, `xref-useNitroFileUploadUpsellEligible.txt`: **not present** in extracted 42825621961 report (possible filename/extraction mismatch; query exists in workflow). Hook decompiles exist for `80867`/`80869` only; `80868`/`80870` and owning module factories/exports remain untraced.
 
-## Changes implemented
-- **None in this pass.** No new Reseam patches added to `DiscordZero.kt` / `Features` JS because no Priority 2 candidate met the required evidence bar (unique owning module factory + embedded source path + export + caller/context proof of promo-only safety, including upload/subscription/account non-regression).
+## Changes implemented (this pass)
+Reseam patches added in `patches/apps/discord/patch/src/main/kotlin/app/discordzero/patches/discord/DiscordZero.kt` using existing `Features.hideExport` (strict 7-param module-factory match, embedded source path, exact `default` export suppression):
+
+| Patch | Module factory (ID, source path) | Export | Component(s) | Evidence / safety notes |
+|---|---|---|---|---|
+| `removeNitroOfferSheets` | `17092` `modules/premium/native/trials/PremiumTrialOfferActionSheet.tsx` | `default` | wrapper `F76220` (76220) presenting trial offer content `F76221/76222` | Unique single-site component-name/content wiring via 17093; trial refs in action-sheet map/kill-switch/press handlers indicate promo offer sheet. Promotional trial offer UI; does not target subscription management, purchases, account features, or entitlement checks. **Runtime validation required** (offer display/removal, subscription/account flows). |
+| `removeNitroOfferSheets` | `18434` `modules/premium/native/discounts/PremiumDiscountOfferActionSheet.tsx` | `default` | wrapper `F80832` (80832) presenting discount offer content `F80833/80834` | Unique xref to 18435 content module; discount offer promo sheet. Same constraints as trial. **Runtime validation required.** |
+| `removeNitroFileUploadPromo` | `18456` `modules/premium/file_upload/native/NitroFileUploadUpsellPromoSheet.tsx` | `default` | `F80858`/`F80859` (80858/80859) | Single xref to module; decomp shows Nitro upsell promo CTA to Premium settings (not upload-size enforcement/error handling). **Promo-only removal intended; must not affect actual file upload/limits.** **Runtime validation required** (normal/large/over-limit uploads, absence of promo sheet). |
+
+**Not patched:** content modules `17093`/`18435` (wrapper suppression preferred/clearer), hook-based eligibility `80867-80870` (module/export/caller proof incomplete).
 
 ## Candidates deliberately left untouched (and why)
 | Candidate | Reason |
 |---|---|
-| 80867–80870 file-upload announcement/upsell eligibility hooks | Owning module factory/export/path and full caller contexts not uniquely proven; risk to upload/marketing-gated UX if mis-targeted. |
-| 80857–80859 file-upload upsell promo sheet/illustration | No unique module-factory/source-path/export evidence; triggering contexts and upload-error non-regression unproven. |
-| 76220–76222 premium trial offer sheet | No unique module-factory/source-path/export evidence; redemption/entry-point impact unproven despite promo content. |
-| 80832–80834 premium discount offer sheet | No unique module-factory/source-path/export evidence; same as trial. |
-| Profile/shop/group-DM/generic upsell surfaces and shared upsell infrastructure | Callers/contexts not fully traced; potential impact on legitimate purchase/profile/group-DM/entitlement flows; some targets known ambiguous. |
+| 80867–80870 file-upload announcement/upsell eligibility hooks | Hook bodies known for 80867/80869 but owning module factory/export/source path and full caller contexts not uniquely proven; 80868/80870 pair unresolved; patching risks upload/marketing-gated UX or non-unique/broad behavior. |
+| 80857 `NitroFileUploadUpsellPromoSheet` "module" label / illustration fragment | Inspect target 80857 decompiles to component fragment in this artifact; actual promo sheet module `18456` was patched instead. No separate safe module target identified. |
+| 76220–76222 / 80832–80834 component IDs as direct targets | Component functions decompiled but wrappers/modules `17092`/`18434` provide clearer unique module-factory anchors; direct function patching not used. |
+| 17093 / 18435 content modules | Wrapper action sheets (`17092`/`18434`) suppressed; patching content modules would be redundant without added safety evidence. |
+| Profile/shop/group-DM/generic upsell surfaces and shared upsell infrastructure | Callers/contexts not fully traced; potential impact on legitimate purchase/profile/group-DM/entitlement flows; some targets known ambiguous/mislabeled in inspect targets (e.g. 53876/52969/68203 decomped to unrelated/non-promo functions). |
 
 ## Validation
 - **Automated tests / `test-unbloat` / `python-checks`:** _TBD in final report._
