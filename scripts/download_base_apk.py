@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Download a Discord base APK using Valenced Manager's mirror order.
+"""Download and validate Discord APK splits from Valenced Manager's mirrors.
 
-The script intentionally downloads only the base split. It does not patch,
-modify, install, or publish the APK.
+This script retrieves original Discord APK inputs only. It does not patch,
+modify, install, or publish the downloaded files.
 """
 
 from __future__ import annotations
@@ -20,33 +20,49 @@ import zipfile
 from pathlib import Path
 from typing import Iterable
 
+# Matches the current Valenced Manager mirror enum and its fallback behavior.
 MIRRORS = (
-    ("tracker", "https://tracker.vendetta.rocks"),
-    ("vendetta-proxy", "https://proxy.vendetta.rocks"),
-    ("k6", "https://vd.k6.tf"),
-    ("nexpid", "https://tracker.vd.nexpid.xyz"),
+    ("ushie-proxy", "https://proxy.vd.ushie.dev"),
+    ("vendetta-tracker", "https://tracker.vendetta.rocks"),
 )
-USER_AGENT = "DiscordZero-BaseDownloader/1.0"
+USER_AGENT = "DiscordZero-BaseDownloader/1.1"
 CHUNK_SIZE = 1024 * 1024
 VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+SPLIT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+ANDROID_ABIS = ("arm64-v8a", "armeabi-v7a", "armeabi", "x86", "x86_64")
 
 
 class DownloadError(Exception):
     """Raised when no mirror produces a valid APK."""
 
 
-def validate_version(version: str) -> str:
-    if not VERSION_RE.fullmatch(version):
+def validate_component(value: str, label: str, pattern: re.Pattern[str]) -> str:
+    if not pattern.fullmatch(value):
         raise ValueError(
-            "Invalid Discord version. Use only letters, numbers, dots, "
-            "underscores, and hyphens."
+            f"Invalid {label}. Use only letters, numbers, dots, underscores, and hyphens."
         )
-    return version
+    return value
 
 
-def build_mirror_urls(version: str, mirrors: Iterable[tuple[str, str]] = MIRRORS):
+def validate_version(version: str) -> str:
+    return validate_component(version, "Discord version", VERSION_RE)
+
+
+def validate_split(split: str) -> str:
+    return validate_component(split, "APK split name", SPLIT_RE)
+
+
+def build_mirror_urls(
+    version: str,
+    split: str = "base",
+    mirrors: Iterable[tuple[str, str]] = MIRRORS,
+):
     version = validate_version(version)
-    path = f"/tracker/download/{urllib.parse.quote(version, safe='')}/base"
+    split = validate_split(split)
+    path = (
+        f"/tracker/download/{urllib.parse.quote(version, safe='')}/"
+        f"{urllib.parse.quote(split, safe='')}"
+    )
     seen: set[str] = set()
     for name, base_url in mirrors:
         url = base_url.rstrip("/") + path
@@ -94,8 +110,7 @@ def download_from_url(url: str, destination: Path, timeout: int) -> None:
     with urllib.request.urlopen(request, timeout=timeout) as response:
         if response.status != 200:
             raise DownloadError(f"HTTP {response.status}")
-        final_url = response.geturl()
-        if not final_url.startswith("https://"):
+        if not response.geturl().startswith("https://"):
             raise DownloadError("Refusing a non-HTTPS redirect.")
 
         with destination.open("wb") as output:
@@ -106,13 +121,15 @@ def download_from_url(url: str, destination: Path, timeout: int) -> None:
                 output.write(chunk)
 
 
-def download_base(
+def download_split(
     version: str,
+    split: str,
     output: Path,
     expected_sha256: str | None = None,
     timeout: int = 60,
 ) -> tuple[str, str, int]:
     version = validate_version(version)
+    split = validate_split(split)
     output.parent.mkdir(parents=True, exist_ok=True)
 
     fd, temporary_name = tempfile.mkstemp(
@@ -123,7 +140,7 @@ def download_base(
     failures: list[str] = []
 
     try:
-        for mirror_name, url in build_mirror_urls(version):
+        for mirror_name, url in build_mirror_urls(version, split):
             try:
                 print(f"Trying {mirror_name}: {url}", flush=True)
                 download_from_url(url, temporary, timeout)
@@ -150,22 +167,25 @@ def download_base(
                 failures.append(message)
                 print(f"Mirror failed: {message}", file=sys.stderr, flush=True)
 
-        raise DownloadError(
-            "All mirrors failed. " + " | ".join(failures)
-        )
+        raise DownloadError("All mirrors failed. " + " | ".join(failures))
     finally:
         temporary.unlink(missing_ok=True)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Download and validate a Discord base APK from Valenced tracker mirrors."
+        description="Download and validate a Discord APK split from Valenced tracker mirrors."
     )
     parser.add_argument("--version", required=True, help="Discord version listed by the tracker")
     parser.add_argument(
+        "--split",
+        default="base",
+        help="APK split to download (default: base; examples: config.en, config.arm64_v8a, config.xxhdpi)",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
-        help="Output APK path (default: build/base-VERSION.apk)",
+        help="Output APK path (default: build/SPLIT-VERSION.apk)",
     )
     parser.add_argument(
         "--sha256",
@@ -179,11 +199,17 @@ def main() -> int:
     if args.sha256 and not re.fullmatch(r"[A-Fa-f0-9]{64}", args.sha256):
         parser.error("--sha256 must contain exactly 64 hexadecimal characters")
 
-    output = args.output or Path("build") / f"base-{args.version}.apk"
+    try:
+        validate_version(args.version)
+        validate_split(args.split)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    output = args.output or Path("build") / f"{args.split}-{args.version}.apk"
 
     try:
-        mirror, digest, size = download_base(
-            args.version, output, args.sha256, args.timeout
+        mirror, digest, size = download_split(
+            args.version, args.split, output, args.sha256, args.timeout
         )
     except (ValueError, DownloadError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
