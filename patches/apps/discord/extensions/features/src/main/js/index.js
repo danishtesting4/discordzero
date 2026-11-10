@@ -1,10 +1,10 @@
-exports.forceStaticAvatarDecoration = function (original, options) {
+export function withStaticAvatarDecoration(options) {
     if (options == null || typeof options !== "object") {
-        return original(options);
+        return options;
     }
 
-    return original({
+    return {
         ...options,
         canAnimate: false,
-    });
-};
+    };
+}
