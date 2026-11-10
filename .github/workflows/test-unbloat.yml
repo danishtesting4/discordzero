@@ -1,0 +1,125 @@
+name: Test DiscordZero unbloat patches
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Discord Android version"
+        required: true
+        default: "352.17"
+        type: string
+      source_run_id:
+        description: "Successful per-ABI build run containing the arm64 APK"
+        required: true
+        default: "42805321472"
+        type: string
+  push:
+    paths:
+      - "patches/**"
+      - ".github/workflows/test-unbloat.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: discordzero-unbloat-test
+  cancel-in-progress: false
+
+jobs:
+  patch-arm64:
+    name: Patch and verify Discord ${{ inputs.version || '352.17' }} arm64
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      DISCORD_VERSION: ${{ inputs.version || '352.17' }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id || '42805321472' }}
+    steps:
+      - name: Check out DiscordZero
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.6.1"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform and build tools
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Download the existing arm64 APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: discordzero-${{ inputs.version || '352.17' }}-arm64-v8a
+          path: build/source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id || '42805321472' }}
+
+      - name: Install Reseam CLI and generate a temporary bundle key
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/.*id("app.reseam.workspace") version "\\(.*\\)".*/\\1/p' patches/settings.gradle.kts)"
+          test -n "$version"
+          curl --fail --location --retry 3 \
+            "https://cdn.reseam.app/engine/v$version/reseam-linux-x64" \
+            --output "$RUNNER_TEMP/reseam"
+          chmod +x "$RUNNER_TEMP/reseam"
+          echo "RESEAM_BIN=$RUNNER_TEMP/reseam" >> "$GITHUB_ENV"
+
+          "$RUNNER_TEMP/reseam" bundle keygen --out "$RUNNER_TEMP/discordzero-bundle.key" \
+            | tee "$RUNNER_TEMP/reseam-keygen.txt"
+          public_key="$(sed -n 's/.*public key (hex): //p' "$RUNNER_TEMP/reseam-keygen.txt" | tail -n 1)"
+          test -n "$public_key"
+          echo "RESEAM_PUBLIC_KEY=$public_key" >> "$GITHUB_ENV"
+          echo "RESEAM_BUNDLE_KEY=$RUNNER_TEMP/discordzero-bundle.key" >> "$GITHUB_ENV"
+
+      - name: Build and inspect the DiscordZero patch bundle
+        working-directory: patches
+        run: |
+          set -euo pipefail
+          gradle bundle --no-daemon
+          "$RESEAM_BIN" bundle list build/reseam/discordzero.reseam --trust "$RESEAM_PUBLIC_KEY"
+
+      - name: Apply DiscordZero patches
+        run: |
+          set -euo pipefail
+          APK="build/source/discordzero-arm64-v8a.apk"
+          OUTPUT="build/discordzero-$DISCORD_VERSION-arm64-v8a-unbloat-test.apk"
+          test -s "$APK"
+          "$RESEAM_BIN" patch "$APK" \
+            --bundle patches/build/reseam/discordzero.reseam \
+            --trust "$RESEAM_PUBLIC_KEY" \
+            --output "$OUTPUT"
+          test -s "$OUTPUT"
+
+      - name: Verify patched APK
+        run: |
+          set -euo pipefail
+          APK="build/discordzero-$DISCORD_VERSION-arm64-v8a-unbloat-test.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -n 5
+
+      - name: Upload test APK and patch bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: discordzero-${{ inputs.version || '352.17' }}-arm64-unbloat-test
+          path: |
+            build/discordzero-${{ inputs.version || '352.17' }}-arm64-v8a-unbloat-test.apk
+            patches/build/reseam/discordzero.reseam
+          if-no-files-found: error
+          retention-days: 7
