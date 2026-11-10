@@ -21,13 +21,9 @@ Open **Actions → Download Discord APK inputs → Run workflow**.
 Inputs:
 - Discord version (defaults to `352.17`)
 - Preferred mirror (defaults to `ushie-proxy`)
-- Native-library ABI (defaults to `arm64_v8a`)
+- Native-library ABI: `arm64_v8a`, `armeabi_v7a`, `x86_64`, `x86`, or `all` (defaults to `arm64_v8a`)
 
-The workflow downloads and validates four APK splits:
-- `base`
-- `config.en`
-- `config.<abi>`
-- `config.xxhdpi`
+Choose one ABI for a device-specific input set, or choose **`all`** to download all four native-library splits. The workflow downloads and validates `base`, `config.en`, `config.xxhdpi`, and the selected `config.<abi>` split(s). With `all`, that means all four ABI splits are included in the same artifact. This is a collection of split APK inputs, not a prebuilt universal APK.
 
 It then creates an input manifest containing each file's size and SHA-256 digest, and uploads the files as a downloadable Actions artifact for seven days. It does not commit APKs to the repository or publish anything into `release/`.
 
