@@ -5,6 +5,7 @@ import app.reseam.patch.after
 import app.reseam.patch.before
 import app.reseam.patch.function
 import app.reseam.patch.patch
+import app.reseam.patch.replace
 
 private val createMessageContent = function {
     name("createMessageContent")
