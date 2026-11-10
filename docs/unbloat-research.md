@@ -72,3 +72,12 @@ Do not publish stock or partially patched APKs as DiscordZero releases.
 - The initial `setPrefersReducedMotion` target did not resolve in Reseam's function matcher, so it was removed rather than shipping an unverified hook.
 - `PremiumFeatureUpsellPill` has two same-named React Compiler/fallback functions in this bundle. Reseam's `function` query requires exactly one match, so this target cannot be patched with the current broad selector. Inspect the parent picker surfaces or a shared helper instead.
 - No partially patched APK has been published. The test workflow is intentionally strict: if a selected patch fails, it produces no APK.
+
+## First successful arm64 test build
+
+- Run: `42813479215`; artifact: `discordzero-352.17-arm64-unbloat-test` (expires 2026-11-17).
+- Reseam logged both `staticChatMedia` and `removeNitroPromotions` as `patch applied`.
+- The APK passed the workflow's package, alignment, signature and APK verification steps.
+- The module-export approach avoids the duplicate React Compiler/fallback function match: patch the seven-argument Metro module factory by its embedded source path, then replace the relevant export on `param(5)` (the module exports object).
+- Original arm64 APK: 201,231,604 bytes. Patched test APK: 200,986,267 bytes. This small difference is signing/packaging overhead, **not meaningful storage trimming**.
+- The Hermes bundle grew from 70,404,633 to 71,062,701 bytes because the patch extension is embedded. Resource and locale trimming has not been implemented yet.
