@@ -6,30 +6,47 @@ A performance-focused Valenced-based Discord fork.
 
 DiscordZero includes a standalone downloader for the original Discord APK splits used as inputs to later patching and unbloating steps.
 
+The latest stable Android version checked for this setup is **352.17**. The version is configurable when manually starting the GitHub Actions workflow.
+
 The mirror order matches the current Valenced Manager source:
 1. `https://proxy.vd.ushie.dev` (default mirror)
 2. `https://tracker.vendetta.rocks` (fallback mirror)
 
 Valenced Manager lets users choose their preferred mirror and tries the other mirror if the selected one fails. DiscordZero supports the same preference with `--mirror`. A redirect from the proxy's website root does not establish whether a specific `/tracker/download/...` route works, so the downloader validates the actual response rather than trusting the hostname.
 
-### Download the base APK
+### GitHub Actions download
+
+Open **Actions → Download Discord APK inputs → Run workflow**.
+
+Inputs:
+- Discord version (defaults to `352.17`)
+- Preferred mirror (defaults to `ushie-proxy`)
+- Native-library ABI (defaults to `arm64_v8a`)
+
+The workflow downloads and validates four APK splits:
+- `base`
+- `config.en`
+- `config.<abi>`
+- `config.xxhdpi`
+
+It then creates an input manifest containing each file's size and SHA-256 digest, and uploads the files as a downloadable Actions artifact for seven days. It does not commit APKs to the repository or publish anything into `release/`.
+
+### Run the downloader locally
 
 Requires Python 3.10 or newer and no third-party packages.
 
 ```sh
-python3 scripts/download_base_apk.py --version 352006
+python3 scripts/download_base_apk.py --version 352.17
 ```
 
-By default, this saves `build/base-352006.apk`. Choose the other mirror first with `--mirror vendetta-tracker`. Use `--output` to choose another path, `--sha256` to check a trusted checksum, and `--timeout` to change the per-mirror timeout.
+By default, this saves `build/base-352.17.apk`. Choose the other mirror first with `--mirror vendetta-tracker`. Use `--output` to choose another path, `--sha256` to check a trusted checksum, and `--timeout` to change the per-mirror timeout.
 
-### Download other splits
-
-Valenced Manager's install pipeline also downloads the English language split, the device ABI's native-library split, and the xxhdpi resources split. The downloader can fetch each one:
+### Download other splits manually
 
 ```sh
-python3 scripts/download_base_apk.py --version 352006 --split config.en
-python3 scripts/download_base_apk.py --version 352006 --split config.arm64_v8a
-python3 scripts/download_base_apk.py --version 352006 --split config.xxhdpi
+python3 scripts/download_base_apk.py --version 352.17 --split config.en
+python3 scripts/download_base_apk.py --version 352.17 --split config.arm64_v8a
+python3 scripts/download_base_apk.py --version 352.17 --split config.xxhdpi
 ```
 
 Use the ABI that matches the target device. Valenced Manager derives its split name from the device's first supported ABI, replacing `-v` with `_v` (for example, `arm64-v8a` becomes `arm64_v8a`).
