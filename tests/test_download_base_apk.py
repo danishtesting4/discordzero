@@ -9,8 +9,13 @@ import scripts.download_base_apk as downloader
 
 
 class DownloaderTests(unittest.TestCase):
+    def test_display_version_is_converted_to_tracker_version_code(self):
+        self.assertEqual(downloader.normalize_tracker_version("352.17"), "352017")
+        self.assertEqual(downloader.normalize_tracker_version("352.6"), "352006")
+        self.assertEqual(downloader.normalize_tracker_version("352017"), "352017")
+
     def test_current_valenced_mirror_order(self):
-        urls = list(downloader.build_mirror_urls("352006"))
+        urls = list(downloader.build_mirror_urls("352.17"))
         self.assertEqual(
             [name for name, _ in urls],
             ["ushie-proxy", "vendetta-tracker"],
@@ -18,12 +23,12 @@ class DownloaderTests(unittest.TestCase):
         self.assertEqual(len({url for _, url in urls}), 2)
         self.assertTrue(urls[0][1].startswith("https://proxy.vd.ushie.dev/"))
         self.assertTrue(urls[1][1].startswith("https://tracker.vendetta.rocks/"))
-        self.assertTrue(urls[0][1].endswith("/tracker/download/352006/base"))
+        self.assertTrue(urls[0][1].endswith("/tracker/download/352017/base"))
 
     def test_can_prefer_vendetta_tracker(self):
         urls = list(
             downloader.build_mirror_urls(
-                "352006", preferred_mirror="vendetta-tracker"
+                "352.17", preferred_mirror="vendetta-tracker"
             )
         )
         self.assertEqual(
@@ -32,15 +37,15 @@ class DownloaderTests(unittest.TestCase):
         )
 
     def test_builds_split_url(self):
-        urls = list(downloader.build_mirror_urls("352.6", "config.arm64_v8a"))
+        urls = list(downloader.build_mirror_urls("352.17", "config.arm64_v8a"))
         self.assertTrue(
-            urls[0][1].endswith("/tracker/download/352.6/config.arm64_v8a")
+            urls[0][1].endswith("/tracker/download/352017/config.arm64_v8a")
         )
 
     def test_rejects_path_injection(self):
         for version, split in (
             ("../latest", "base"),
-            ("352006?x=1", "base"),
+            ("352017?x=1", "base"),
             ("352006", "../base"),
             ("352006", "base?x=1"),
             ("", "base"),
@@ -88,7 +93,7 @@ class DownloaderTests(unittest.TestCase):
                 downloader, "download_from_url", side_effect=fake_download
             ):
                 mirror, digest, size = downloader.download_split(
-                    "352006", "base", output
+                    "352.17", "base", output
                 )
 
             self.assertEqual(mirror, "vendetta-tracker")
