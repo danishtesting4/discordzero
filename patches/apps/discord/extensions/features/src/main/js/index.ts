@@ -1,5 +1,3 @@
-const PICKER_FEATURES = new Set(["emojisEverywhere", "stickersEverywhere"]);
-
 export function withStaticChatMediaOptions(props: any) {
     if (props == null || typeof props !== "object") {
         return props;
@@ -20,6 +18,14 @@ export function withStaticChatMediaOptions(props: any) {
     };
 }
 
-export function isPickerUpsell(props: any) {
-    return props != null && PICKER_FEATURES.has(props.featureName);
+export function hideExport(exports: any, exportName: string) {
+    if (exports == null || typeof exports !== "object") {
+        return exports;
+    }
+
+    exports[exportName] = function DiscordZeroHiddenPromotion() {
+        return null;
+    };
+
+    return exports;
 }
