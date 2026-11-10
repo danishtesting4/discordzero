@@ -54,7 +54,7 @@ Prior validation (per `docs/unbloat-research.md`): `removeNitroPromotions` appli
 ## Reproducibility / inspection workflow changes
 - Extended `.github/workflows/inspect-discord-bundle.yml` xref queries for Nitro file-upload/offer tracing: `useNitroFileUploadRolloutEnabled`, `useNonNitroFileUploadMarketingEnabled`, `getNitroFileUploadRolloutCopy`, `NitroFileUploadUpsellPromoSheet`, `PremiumTrialOfferActionSheetContent`, `PremiumDiscountOfferActionSheetContent`, `PremiumTrialOfferActionSheet`, `PremiumDiscountOfferActionSheet`.
 - Extended inspect decompile targets for candidate module factories/related functions: `18456`, `17093`, `18435`, `17092`, `18434`, `18461`, `5065`, `68181/68182`, `80861/80862`.
-- Inspect runs: `42825621961` (success, Nitro xref evidence collected), `42826462840` (in progress at time of latest edit; pending module-factory decompiles).
+- Inspect runs: `42825621961` (success, Nitro xref evidence collected) — https://github.com/danishtesting4/discordzero/actions/runs/42825621961; `42826462840` (success, module-factory candidate decompiles collected) — https://github.com/danishtesting4/discordzero/actions/runs/42826462840.
 
 ## Evidence from inspect runs 42825621961 / 42826462840
 - `xref-getNitroFileUploadRolloutCopy.txt` (42825621961): 7 refs — `5065`, `68181/68182` FractionalNitroPreview, `76221/76222`, `80833/80834`.
@@ -85,10 +85,24 @@ Reseam patches added in `patches/apps/discord/patch/src/main/kotlin/app/discordz
 | 17093 / 18435 content modules | Wrapper action sheets (`17092`/`18434`) suppressed; patching content modules would be redundant without added safety evidence. |
 | Profile/shop/group-DM/generic upsell surfaces and shared upsell infrastructure | Callers/contexts not fully traced; potential impact on legitimate purchase/profile/group-DM/entitlement flows; some targets known ambiguous/mislabeled in inspect targets (e.g. 53876/52969/68203 decomped to unrelated/non-promo functions). |
 
-## Validation
-- **Automated tests / `test-unbloat` / `python-checks`:** _TBD in final report._
-- **Patch application logs (unique match/apply):** N/A (no new Nitro patches).
-- **APK size comparison:** N/A (no new patched build produced by code change in this pass beyond any CI runs recorded below). Do not claim meaningful size savings without measurements.
+## Validation (CI, 352.17 arm64)
+- **`test-unbloat.yml` run 42827307328 (success):** https://github.com/danishtesting4/discordzero/actions/runs/42827307328  
+  - Commit: `2a9f21b` (`nitro-expansion-35217`)
+  - Source APK artifact: `discordzero-352.17-arm64-v8a` from run `42805321472`
+  - Reseam bundle build/list: OK (`discordzero.reseam`, 34,389 bytes in artifact)
+  - **Patch application:** 7 patches applied, 0 failed/skipped/dependencies/unmountable (`patch application finished`, `applied=7 ... failed=0`). Explicitly applied: `staticChatMedia`, `staticProfileMedia`, `disableDiscoveryRoutes`, `disableServerDiscovery`, `removeNitroPromotions`, **`removeNitroOfferSheets`**, **`removeNitroFileUploadPromo`**.
+  - **Locale trim:** `locale_cache_entries=2097`, `replaced_entries=1187`, `kept_locales=[enGB,id]`, `compressed_bytes_saved=7,137,052`, `new_compressed_bytes=4,498`, `output_is_unsigned=true` (same locale result as prior validated baseline).
+  - **Packaging/signing:** zipalign, apksigner sign, apksigner verify, APK verification steps completed successfully (workflow green).
+- **Local repository tests:** `tests/test_download_base_apk.py`, `tests/test_trim_locale_caches.py` **not run locally** (no `python`/`py` interpreter found in PATH in this environment). No changes were made to downloader/locale-trim scripts or their tests in this pass.
+- **Patch match uniqueness:** enforced by Reseam/module-factory matching in workflow; no missing/non-unique match errors reported and all selected patches applied.
+
+## APK size comparison (arm64, 352.17)
+| Build | Size (bytes) | Notes |
+|---|---:|---|
+| Original source APK (build-abi artifact, run 42805321472 baseline) | 201,231,604 | From prior documented baseline (`docs/unbloat-research.md`) |
+| Prior unbloat test APK (run 42815156797) | 194,735,426 | Included locale trim + earlier patches |
+| This pass unbloat test APK (run 42827307328) | 194,743,618 | Artifact `discordzero-352.17-arm64-unbloat-test` (98,862,426 bytes compressed zip artifact; APK 194,743,618 bytes) |
+| Delta vs prior unbloat test | +8,192 | **Not meaningful storage savings**; attributable to patch/bundle/packaging differences. No resource trimming beyond existing locale cache trim. |
 
 ## Remaining runtime validation requirements (release gates)
 **Priority 1 (Discovery), still outstanding:** invite deep links/codes, create-server, redirected Discovery routes/back navigation, login/messaging/uploads/notifications/voice.
