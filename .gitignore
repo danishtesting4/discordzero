@@ -1,5 +1,7 @@
 # Local build inputs and intermediate downloads
 /build/
+/patches/build/
+/patches/.gradle/
 *.part
 __pycache__/
 *.py[cod]
