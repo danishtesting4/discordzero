@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import re
@@ -75,6 +76,7 @@ def trim_apk(
     original_compressed_bytes = 0
     cache_count = 0
     signature_files_removed: list[str] = []
+    expected_entry_count = 0
     manifest_hash: bytes | None = None
     resources_hash: bytes | None = None
 
@@ -88,14 +90,16 @@ def trim_apk(
 
     try:
         with zipfile.ZipFile(source_path, "r") as source:
-            names = {info.filename for info in source.infolist()}
+            source_infos = source.infolist()
+            names = {info.filename for info in source_infos}
+            expected_entry_count = sum(not is_v1_signature(info.filename) for info in source_infos)
             if "AndroidManifest.xml" not in names or "resources.arsc" not in names:
                 raise ValueError("Input is not a complete Android APK")
 
-            manifest_hash = __import__("hashlib").sha256(
+            manifest_hash = hashlib.sha256(
                 source.read("AndroidManifest.xml")
             ).digest()
-            resources_hash = __import__("hashlib").sha256(
+            resources_hash = hashlib.sha256(
                 source.read("resources.arsc")
             ).digest()
 
@@ -141,18 +145,14 @@ def trim_apk(
             raise ValueError("No compiled locale cache resources found")
 
         with zipfile.ZipFile(temporary_path, "r") as result:
-            result_names = {info.filename for info in result.infolist()}
-            if len(result.infolist()) != len(
-                [info for info in zipfile.ZipFile(source_path).infolist()
-                 if not is_v1_signature(info.filename)]
-            ):
+            if len(result.infolist()) != expected_entry_count:
                 raise ValueError("ZIP entry count changed unexpectedly")
 
             for filename in replaced_names:
                 if result.read(filename) != b"{}":
                     raise ValueError(f"Locale cache replacement failed: {filename}")
 
-            if __import__("hashlib").sha256(
+            if hashlib.sha256(
                 result.read("AndroidManifest.xml")
             ).digest() != manifest_hash:
                 raise ValueError("AndroidManifest.xml changed unexpectedly")
