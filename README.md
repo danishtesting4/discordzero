@@ -10,7 +10,7 @@ The mirror order matches the current Valenced Manager source:
 1. `https://proxy.vd.ushie.dev` (default mirror)
 2. `https://tracker.vendetta.rocks` (fallback mirror)
 
-The manager lets users choose their preferred mirror and tries the other mirror if the selected one fails. The website root redirect does not establish whether a specific `/tracker/download/...` route works, so the downloader validates the actual response rather than trusting the hostname.
+Valenced Manager lets users choose their preferred mirror and tries the other mirror if the selected one fails. DiscordZero supports the same preference with `--mirror`. A redirect from the proxy's website root does not establish whether a specific `/tracker/download/...` route works, so the downloader validates the actual response rather than trusting the hostname.
 
 ### Download the base APK
 
@@ -20,7 +20,7 @@ Requires Python 3.10 or newer and no third-party packages.
 python3 scripts/download_base_apk.py --version 352006
 ```
 
-By default, this saves `build/base-352006.apk`. Use `--output` to choose another path, `--sha256` to check a trusted checksum, and `--timeout` to change the per-mirror timeout.
+By default, this saves `build/base-352006.apk`. Choose the other mirror first with `--mirror vendetta-tracker`. Use `--output` to choose another path, `--sha256` to check a trusted checksum, and `--timeout` to change the per-mirror timeout.
 
 ### Download other splits
 
@@ -38,7 +38,7 @@ The downloader validates that each response is an APK archive containing `Androi
 
 The tool only retrieves and validates APK splits. It does not patch, modify, install, or publish them. Downloaded files stay in the ignored local `build/` directory rather than being committed to this repository.
 
-Reference implementation: [Valenced Manager](https://github.com/Valenced/valenced-manager), especially its mirror preference and download-step code.
+Reference implementation: [Valenced Manager](https://github.com/Valenced/valenced-manager), especially its [mirror preference](https://github.com/Valenced/valenced-manager/blob/main/app/src/main/java/app/valenced/manager/domain/manager/PreferenceManager.kt) and [download-step fallback logic](https://github.com/Valenced/valenced-manager/blob/main/app/src/main/java/app/valenced/manager/installer/step/download/base/DownloadStep.kt).
 
 ## Tracker watcher
 
