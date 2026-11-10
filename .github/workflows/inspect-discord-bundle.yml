@@ -306,6 +306,7 @@ jobs:
             "2024:profile_banner_url_module"
             "8711:profile_banner_url_module_alt"
             "1418:avatar_decoration_url_module"
+            "25837:get_avatar_decoration_url_body"
           )
 
           for target in "${targets[@]}"; do
