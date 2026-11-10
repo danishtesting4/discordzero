@@ -20,16 +20,16 @@ import zipfile
 from pathlib import Path
 from typing import Iterable
 
-# Matches the current Valenced Manager mirror enum and its fallback behavior.
+# Current Valenced Manager mirror enum; the proxy is the default preference.
 MIRRORS = (
     ("ushie-proxy", "https://proxy.vd.ushie.dev"),
     ("vendetta-tracker", "https://tracker.vendetta.rocks"),
 )
-USER_AGENT = "DiscordZero-BaseDownloader/1.1"
+DEFAULT_MIRROR = "ushie-proxy"
+USER_AGENT = "DiscordZero-BaseDownloader/1.2"
 CHUNK_SIZE = 1024 * 1024
 VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 SPLIT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-ANDROID_ABIS = ("arm64-v8a", "armeabi-v7a", "armeabi", "x86", "x86_64")
 
 
 class DownloadError(Exception):
@@ -55,16 +55,23 @@ def validate_split(split: str) -> str:
 def build_mirror_urls(
     version: str,
     split: str = "base",
+    preferred_mirror: str = DEFAULT_MIRROR,
     mirrors: Iterable[tuple[str, str]] = MIRRORS,
 ):
     version = validate_version(version)
     split = validate_split(split)
+    mirror_list = list(mirrors)
+    names = {name for name, _ in mirror_list}
+    if preferred_mirror not in names:
+        raise ValueError(f"Unknown mirror: {preferred_mirror}")
+    mirror_list.sort(key=lambda item: item[0] != preferred_mirror)
+
     path = (
         f"/tracker/download/{urllib.parse.quote(version, safe='')}/"
         f"{urllib.parse.quote(split, safe='')}"
     )
     seen: set[str] = set()
-    for name, base_url in mirrors:
+    for name, base_url in mirror_list:
         url = base_url.rstrip("/") + path
         if url not in seen:
             seen.add(url)
@@ -127,6 +134,7 @@ def download_split(
     output: Path,
     expected_sha256: str | None = None,
     timeout: int = 60,
+    preferred_mirror: str = DEFAULT_MIRROR,
 ) -> tuple[str, str, int]:
     version = validate_version(version)
     split = validate_split(split)
@@ -140,7 +148,7 @@ def download_split(
     failures: list[str] = []
 
     try:
-        for mirror_name, url in build_mirror_urls(version, split):
+        for mirror_name, url in build_mirror_urls(version, split, preferred_mirror):
             try:
                 print(f"Trying {mirror_name}: {url}", flush=True)
                 download_from_url(url, temporary, timeout)
@@ -183,6 +191,12 @@ def main() -> int:
         help="APK split to download (default: base; examples: config.en, config.arm64_v8a, config.xxhdpi)",
     )
     parser.add_argument(
+        "--mirror",
+        choices=[name for name, _ in MIRRORS],
+        default=DEFAULT_MIRROR,
+        help="Preferred mirror (default: ushie-proxy)",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         help="Output APK path (default: build/SPLIT-VERSION.apk)",
@@ -209,7 +223,12 @@ def main() -> int:
 
     try:
         mirror, digest, size = download_split(
-            args.version, args.split, output, args.sha256, args.timeout
+            args.version,
+            args.split,
+            output,
+            args.sha256,
+            args.timeout,
+            args.mirror,
         )
     except (ValueError, DownloadError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
