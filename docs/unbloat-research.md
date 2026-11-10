@@ -92,3 +92,9 @@ Do not publish stock or partially patched APKs as DiscordZero releases.
 - Final test APK size: 194,735,426 bytes, versus 201,231,604 bytes for the original arm64 APK — 6,496,178 bytes smaller overall after patching, ZIP rewriting, alignment and signing.
 - The build log confirms `staticChatMedia`, `staticProfileMedia`, and `removeNitroPromotions` all applied successfully.
 - Locale tradeoff: English US remains the app's base fallback, English UK and Indonesian caches are retained; other languages fall back to English.
+
+## Discovery patch validation
+
+- The `disableServerDiscovery` patch was added and passed the same strict arm64 patch/build/sign/verify workflow in run `42815357405`.
+- It targets the unique `GlobalDiscoveryServersFeaturedSearchManager` Metro module factory and disables its connection-open trigger and featured-guild fetch methods.
+- This currently disables the featured server-discovery feed requests. It does not yet prove that every app-directory/discovery screen or entry point has been removed; those paths are still being mapped.
