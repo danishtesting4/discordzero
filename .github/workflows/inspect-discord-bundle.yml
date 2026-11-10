@@ -111,6 +111,21 @@ jobs:
             "GLOBAL_DISCOVERY_APPS"
             "APPLICATION_DIRECTORY"
             "openGuildCreateJoinActionSheet"
+            "HomeDrawerAddServerRow"
+            "HomeDrawerAddServerRowExpandedChildren"
+            "GuildActionSheetDirectory"
+            "isReactCompilerEnabled"
+            "getUpsellType"
+            "isEmojiPickerUpsellFeature"
+            "usePremiumUpsellConfig"
+            "PremiumExpressionPickerFeatureUpsell"
+            "EmojiPickerPremiumSearchUpsell"
+            "StickerPickerPremiumSearchUpsell"
+            "AutoplayGifSetting"
+            "gifAutoPlay"
+            "GifAutoPlay"
+            "useSetting"
+            "getSetting"
           )
 
           for query in "${queries[@]}"; do
