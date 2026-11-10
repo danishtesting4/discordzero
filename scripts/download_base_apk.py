@@ -29,6 +29,7 @@ DEFAULT_MIRROR = "ushie-proxy"
 USER_AGENT = "DiscordZero-BaseDownloader/1.2"
 CHUNK_SIZE = 1024 * 1024
 VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+DISPLAY_VERSION_RE = re.compile(r"^(\d+)\.(\d{1,3})$")
 SPLIT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
@@ -44,8 +45,18 @@ def validate_component(value: str, label: str, pattern: re.Pattern[str]) -> str:
     return value
 
 
+def normalize_tracker_version(version: str) -> str:
+    """Convert display versions (352.17) to tracker codes (352017)."""
+    version = validate_component(version, "Discord version", VERSION_RE)
+    match = DISPLAY_VERSION_RE.fullmatch(version)
+    if match:
+        major, minor = match.groups()
+        return f"{major}{minor.zfill(3)}"
+    return version
+
+
 def validate_version(version: str) -> str:
-    return validate_component(version, "Discord version", VERSION_RE)
+    return normalize_tracker_version(version)
 
 
 def validate_split(split: str) -> str:
@@ -58,7 +69,7 @@ def build_mirror_urls(
     preferred_mirror: str = DEFAULT_MIRROR,
     mirrors: Iterable[tuple[str, str]] = MIRRORS,
 ):
-    version = validate_version(version)
+    version = normalize_tracker_version(version)
     split = validate_split(split)
     mirror_list = list(mirrors)
     names = {name for name, _ in mirror_list}
@@ -136,7 +147,7 @@ def download_split(
     timeout: int = 60,
     preferred_mirror: str = DEFAULT_MIRROR,
 ) -> tuple[str, str, int]:
-    version = validate_version(version)
+    version = normalize_tracker_version(version)
     split = validate_split(split)
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -184,7 +195,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Download and validate a Discord APK split from Valenced tracker mirrors."
     )
-    parser.add_argument("--version", required=True, help="Discord version listed by the tracker")
+    parser.add_argument("--version", required=True, help="Discord version (for example 352.17 or tracker code 352017)")
     parser.add_argument(
         "--split",
         default="base",
