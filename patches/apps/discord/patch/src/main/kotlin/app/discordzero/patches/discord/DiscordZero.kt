@@ -3,10 +3,8 @@ package app.discordzero.patches.discord
 import app.reseam.patch.ExtJsModule
 import app.reseam.patch.after
 import app.reseam.patch.before
-import app.reseam.patch.export
 import app.reseam.patch.function
 import app.reseam.patch.patch
-import app.reseam.patch.wrap
 
 private object Features : ExtJsModule("discord-features") {
     val forceStaticAvatarDecoration by export()
