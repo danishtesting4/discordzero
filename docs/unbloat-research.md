@@ -31,6 +31,17 @@ Function IDs below are from this exact 352.17 bundle. They are investigation lea
 | Avatar rendering | `48497/48498 HeaderAvatar`, `66894/66895 UserAvatar`, `70989/70990 Avatar` | Decoration and animation props passed through |
 | Discovery | `64670/64671 ApplicationCommandDiscovery`, `84048 getGlobalDiscoveryServersBannerTitle`, `84053 fromDiscoverableGuildServer` | Whether these belong to the user-facing discovery surfaces |
 
+## Decompiled behaviour confirmed
+
+- `setPrefersReducedMotion` dispatches Discord's accessibility action. When reduced motion becomes enabled, it applies settings overrides: `gifAutoPlay=false`, `animateEmoji=false`, and `animateStickers=ANIMATE_ON_INTERACTION`.
+- `UserProfileBanner` reads the GIF autoplay setting and uses it to choose whether the banner URL may animate. It also has a manual animation toggle, so the still-by-default behaviour can preserve manual playback.
+- `getAvatarDecorationURL` explicitly chooses `STATIC` or `ANIMATED` assets from its `canAnimate` argument. Forcing that argument to false keeps the decoration's static art instead of removing the decoration.
+- `preloadUserBannerImage` uses the same GIF autoplay setting when selecting banner URLs. With reduced motion enabled, it can preload the static banner.
+- `useNitroFileUploadUpsellEligible` calls both premium-subscription and marketing-eligibility hooks, then returns the marketing result. The patch changes the final result only, preserving hook calls.
+- `useNitroFileUploadAnnouncementEligible` similarly calls its hooks before returning its eligibility result; the patch changes only the final result.
+- `useAutoPlay` is a generic animation/carousel control hook, not the global GIF autoplay setting. Leave it untouched.
+- `ApplicationCommandDiscovery` is slash-command discovery, not the server-discovery screen. Do not patch it as a substitute for removing server discovery.
+
 ## Storage audit
 
 From the arm64 352.17 APK:
