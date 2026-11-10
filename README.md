@@ -14,18 +14,17 @@ The mirror order matches the current Valenced Manager source:
 
 Valenced Manager lets users choose their preferred mirror and tries the other mirror if the selected one fails. DiscordZero supports the same preference with `--mirror`. A redirect from the proxy's website root does not establish whether a specific `/tracker/download/...` route works, so the downloader validates the actual response rather than trusting the hostname.
 
-### GitHub Actions download
+### GitHub Actions universal APK build
 
-Open **Actions → Download Discord APK inputs → Run workflow**.
+Open **Actions → Build universal Discord APK → Run workflow**.
 
 Inputs:
 - Discord version (defaults to `352.17`)
-- Preferred mirror (defaults to `ushie-proxy`)
-- Native-library ABI: `arm64_v8a`, `armeabi_v7a`, `x86_64`, `x86`, or `all` (defaults to `arm64_v8a`)
+- Preferred download mirror (defaults to `ushie-proxy`)
 
-Choose one ABI for a device-specific input set, or choose **`all`** to download all four native-library splits. The workflow downloads and validates `base`, `config.en`, `config.xxhdpi`, and the selected `config.<abi>` split(s). With `all`, that means all four ABI splits are included in the same artifact. This is a collection of split APK inputs, not a prebuilt universal APK.
+The workflow downloads the base, English, density, and all four native ABI splits (`arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`). APKEditor merges them into one standalone APK, then Android build-tools zipaligns and signs it with a temporary CI-generated certificate. A verification step checks that all four ABI library directories are present before the artifact is uploaded.
 
-It then creates an input manifest containing each file's size and SHA-256 digest, and uploads the files as a downloadable Actions artifact for seven days. It does not commit APKs to the repository or publish anything into `release/`.
+The output is a **single universal APK** artifact, not a collection of split APKs. It is signed with an ephemeral certificate, so it will not update an official Discord installation in place; uninstall any differently signed existing build before installing it. The artifact and manifest are retained by GitHub Actions for seven days. The workflow does not commit APKs to the repository or publish anything into `release/`.
 
 ### Run the downloader locally
 
