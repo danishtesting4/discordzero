@@ -1,0 +1,208 @@
+name: Build Discord APKs (per ABI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Discord Android version"
+        required: true
+        default: "352.17"
+        type: string
+      mirror:
+        description: "Preferred download mirror"
+        required: true
+        default: "ushie-proxy"
+        type: choice
+        options:
+          - ushie-proxy
+          - vendetta-tracker
+  push:
+    paths:
+      - ".github/workflows/build-abi-apks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discordzero-abi-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.abi }} APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            split: config.arm64_v8a
+          - abi: armeabi-v7a
+            split: config.armeabi_v7a
+          - abi: x86_64
+            split: config.x86_64
+          - abi: x86
+            split: config.x86
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Check out DiscordZero
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android build tools
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android SDK command-line tools were not found on this runner."
+            exit 1
+          fi
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" --install "build-tools;35.0.0"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/zipalign"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+
+      - name: Download shared and ABI-specific APK splits
+        env:
+          DISCORD_VERSION: ${{ inputs.version || '352.17' }}
+          PREFERRED_MIRROR: ${{ inputs.mirror || 'ushie-proxy' }}
+          ABI_SPLIT: ${{ matrix.split }}
+        run: |
+          set -euo pipefail
+          for split in base config.en config.xxhdpi "$ABI_SPLIT"; do
+            python scripts/download_base_apk.py \
+              --version "$DISCORD_VERSION" \
+              --split "$split" \
+              --mirror "$PREFERRED_MIRROR"
+          done
+
+      - name: Download pinned APKEditor
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/REAndroid/APKEditor/releases/download/V1.4.9/APKEditor-1.4.9.jar" \
+            --output "$RUNNER_TEMP/APKEditor-1.4.9.jar"
+          echo "a9cd40df818845456be6d696de6110c89edf4b0a0580cb83438ed6b25a366e67  $RUNNER_TEMP/APKEditor-1.4.9.jar" | sha256sum --check -
+
+      - name: Merge only this ABI into a standalone APK
+        env:
+          ABI: ${{ matrix.abi }}
+        run: |
+          set -euo pipefail
+          java -Xmx6g -jar "$RUNNER_TEMP/APKEditor-1.4.9.jar" \
+            merge -i build -o "build/discordzero-$ABI-unsigned.apk"
+
+      - name: Verify APK contains only the selected ABI
+        env:
+          ABI: ${{ matrix.abi }}
+        run: |
+          python - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          abi = os.environ["ABI"]
+          apk = Path(f"build/discordzero-{abi}-unsigned.apk")
+          if not apk.is_file() or apk.stat().st_size == 0:
+              raise SystemExit("Merged ABI APK was not created.")
+
+          supported = {"arm64-v8a", "armeabi-v7a", "x86_64", "x86"}
+          with zipfile.ZipFile(apk) as archive:
+              names = archive.namelist()
+              bad = archive.testzip()
+              if bad:
+                  raise SystemExit(f"Corrupt ZIP entry: {bad}")
+              present = {
+                  item for item in supported
+                  if any(name.startswith(f"lib/{item}/") for name in names)
+              }
+          if abi not in present:
+              raise SystemExit(f"Expected native libraries for {abi}; found {sorted(present)}")
+          unexpected = present - {abi}
+          if unexpected:
+              raise SystemExit(f"APK unexpectedly contains other ABIs: {sorted(unexpected)}")
+          print(f"Verified {abi}; no other supported ABI libraries are present.")
+          PY
+
+      - name: Align and sign APK
+        env:
+          ABI: ${{ matrix.abi }}
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/discordzero-temporary.jks" \
+            -storepass discordzero-temporary \
+            -keypass discordzero-temporary \
+            -alias discordzero \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=DiscordZero Temporary Build"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 \
+            "build/discordzero-$ABI-unsigned.apk" \
+            "build/discordzero-$ABI-aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$RUNNER_TEMP/discordzero-temporary.jks" \
+            --ks-pass pass:discordzero-temporary \
+            --key-pass pass:discordzero-temporary \
+            --ks-key-alias discordzero \
+            --out "build/discordzero-$ABI.apk" \
+            "build/discordzero-$ABI-aligned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            "build/discordzero-$ABI.apk"
+
+      - name: Write build manifest
+        env:
+          DISCORD_VERSION: ${{ inputs.version || '352.17' }}
+          PREFERRED_MIRROR: ${{ inputs.mirror || 'ushie-proxy' }}
+          ABI: ${{ matrix.abi }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          abi = os.environ["ABI"]
+          apk = Path(f"build/discordzero-{abi}.apk")
+          manifest = {
+              "discord_version": os.environ["DISCORD_VERSION"],
+              "preferred_mirror": os.environ["PREFERRED_MIRROR"],
+              "artifact_type": "standalone-single-abi-apk",
+              "abi": abi,
+              "apk": {
+                  "name": apk.name,
+                  "size": apk.stat().st_size,
+                  "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+                  "signing": "temporary CI-generated certificate",
+              },
+          }
+          Path(f"build/{abi}-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\\n", encoding="utf-8"
+          )
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Upload ABI APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: discordzero-${{ inputs.version || '352.17' }}-${{ matrix.abi }}
+          path: |
+            build/discordzero-${{ matrix.abi }}.apk
+            build/${{ matrix.abi }}-manifest.json
+          if-no-files-found: error
+          retention-days: 7
