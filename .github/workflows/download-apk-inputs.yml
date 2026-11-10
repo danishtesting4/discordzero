@@ -26,6 +26,7 @@ on:
           - armeabi_v7a
           - x86_64
           - x86
+          - all
 
 permissions:
   contents: read
@@ -36,9 +37,9 @@ concurrency:
 
 jobs:
   download:
-    name: Download Discord ${{ inputs.version }} inputs
+    name: Download Discord ${{ inputs.version }} inputs (${{ inputs.abi }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out DiscordZero
         uses: actions/checkout@v4
@@ -66,10 +67,19 @@ jobs:
             --split config.en \
             --mirror "$PREFERRED_MIRROR"
 
-          python scripts/download_base_apk.py \
-            --version "$DISCORD_VERSION" \
-            --split "config.$ANDROID_ABI" \
-            --mirror "$PREFERRED_MIRROR"
+          if [ "$ANDROID_ABI" = "all" ]; then
+            ABIS="arm64_v8a armeabi_v7a x86_64 x86"
+          else
+            ABIS="$ANDROID_ABI"
+          fi
+
+          for abi in $ABIS; do
+            echo "Downloading native library split for $abi"
+            python scripts/download_base_apk.py \
+              --version "$DISCORD_VERSION" \
+              --split "config.$abi" \
+              --mirror "$PREFERRED_MIRROR"
+          done
 
           python scripts/download_base_apk.py \
             --version "$DISCORD_VERSION" \
@@ -88,12 +98,18 @@ jobs:
           import os
           from pathlib import Path
 
-          version = os.environ["DISCORD_VERSION"]
+          selected_abi = os.environ["ANDROID_ABI"]
+          abis = (
+              ["arm64_v8a", "armeabi_v7a", "x86_64", "x86"]
+              if selected_abi == "all"
+              else [selected_abi]
+          )
           files = sorted(Path("build").glob("*.apk"))
           manifest = {
-              "discord_version": version,
+              "discord_version": os.environ["DISCORD_VERSION"],
               "preferred_mirror": os.environ["PREFERRED_MIRROR"],
-              "abi": os.environ["ANDROID_ABI"],
+              "abi_selection": selected_abi,
+              "native_library_abis": abis,
               "files": [
                   {
                       "name": path.name,
