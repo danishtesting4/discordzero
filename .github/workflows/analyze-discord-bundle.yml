@@ -1,0 +1,125 @@
+name: Analyze Discord Hermes bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Actions run containing the per-ABI APK artifact"
+        required: true
+        default: "42805321472"
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  analyze:
+    name: Decompile Discord JS bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out DiscordZero
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download arm64 APK artifact from source run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/source
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "discordzero-352.17-arm64-v8a" \
+            --dir build/source
+          APK="$(find build/source -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          mkdir -p build/apk
+          unzip -q "$APK" 'assets/index.android.bundle' -d build/apk
+          test -s build/apk/assets/index.android.bundle
+
+      - name: Download pinned Hermes decompiler
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/SymbioticSec/hermes-decomp/releases/download/v0.2.4/hermes-decomp-v0.2.4-linux-x86_64.tar.gz" \
+            --output "$RUNNER_TEMP/hermes-decomp.tar.gz"
+          echo "6e070410432575698657b38d3497f66fd91c0c00f63880d6776703d81d99b5ac  $RUNNER_TEMP/hermes-decomp.tar.gz" | sha256sum --check -
+          mkdir -p "$RUNNER_TEMP/hermes-decomp"
+          tar -xzf "$RUNNER_TEMP/hermes-decomp.tar.gz" -C "$RUNNER_TEMP/hermes-decomp"
+          BIN="$(find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit)"
+          test -n "$BIN"
+          chmod +x "$BIN"
+          echo "HERMES_DECOMP=$BIN" >> "$GITHUB_ENV"
+
+      - name: Inspect bundle metadata and module inventory
+        run: |
+          set -euo pipefail
+          "$HERMES_DECOMP" info build/apk/assets/index.android.bundle | tee build/bundle-info.txt
+          "$HERMES_DECOMP" modules build/apk/assets/index.android.bundle > build/modules.txt
+
+      - name: Decompile bundle
+        run: |
+          set -euo pipefail
+          "$HERMES_DECOMP" decompile build/apk/assets/index.android.bundle \
+            --deep -o build/discord-bundle.js
+
+      - name: Extract candidate feature references
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          source = Path("build/discord-bundle.js").read_text(
+              encoding="utf-8", errors="replace"
+          )
+          terms = {
+              "nitro": r"nitro|premium|upsell|marketing|trial.?offer|discount.?offer",
+              "discovery": r"discovery|guild.?discovery|discover.?tab",
+              "gif": r"gif|autoplay|auto.?play|animated.?image",
+              "profile_effects": r"profile.?decoration|avatar.?decoration|profile.?effect|banner.?effect",
+              "motion": r"reduced.?motion|animation|transition|withSpring|withTiming",
+          }
+          report = {
+              "source_bytes": len(source.encode("utf-8")),
+              "source_lines": source.count("\\n") + 1,
+              "matches": {},
+          }
+          lines = source.splitlines()
+          for label, pattern in terms.items():
+              regex = re.compile(pattern, re.IGNORECASE)
+              hits = []
+              for number, line in enumerate(lines, 1):
+                  if regex.search(line):
+                      hits.append({
+                          "line": number,
+                          "text": line[:900],
+                      })
+                      if len(hits) >= 80:
+                          break
+              report["matches"][label] = hits
+          Path("build/feature-candidates.json").write_text(
+              json.dumps(report, indent=2) + "\\n", encoding="utf-8"
+          )
+          print(json.dumps({
+              key: len(value) for key, value in report["matches"].items()
+          }, indent=2))
+          PY
+
+      - name: Upload analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: discordzero-352.17-hermes-analysis
+          path: |
+            build/bundle-info.txt
+            build/modules.txt
+            build/feature-candidates.json
+          if-no-files-found: error
+          retention-days: 7
