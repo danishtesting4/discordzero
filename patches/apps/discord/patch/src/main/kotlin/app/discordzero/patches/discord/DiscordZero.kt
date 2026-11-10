@@ -37,6 +37,24 @@ private val nitroUpsellButton = function {
     paramCount(1)
 }
 
+private val premiumFeatureUpsellPill = function {
+    name("PremiumFeatureUpsellPill")
+    strings("native.PremiumFeatureUpsell", "featureName", "ShinyButton")
+    paramCount(1)
+}
+
+private val premiumExpressionPickerSearchUpsell = function {
+    name("PremiumExpressionPickerSearchUpsell")
+    strings("ctaText", "PressableOpacity", "upsell")
+    paramCount(1)
+}
+
+private val premiumFeatureUpsell = function {
+    name("PremiumFeatureUpsell")
+    strings("featureName", "useAnalyticsContext", "shouldShow")
+    paramCount(1)
+}
+
 private val premiumUpsellAlert = function {
     name("PremiumUpsellAlert")
     strings("Nitro Upsell", "PREMIUM_UPSELL_ALERT")
@@ -68,7 +86,7 @@ private val premiumDiscountOfferActionSheetContent = function {
 }
 
 val reduceAutomaticAnimations = patch("Reduce automatic animations") {
-    description("Disables autoplay and uses static avatar decorations while keeping manual banner playback available.")
+    description("Disables GIF and banner autoplay, uses static avatar decorations, and keeps manual banner playback available.")
     compatibleWith("com.discord")
 
     execute {
@@ -83,7 +101,7 @@ val reduceAutomaticAnimations = patch("Reduce automatic animations") {
 }
 
 val removeNitroPromotions = patch("Remove Nitro promotions") {
-    description("Suppresses Nitro upload marketing, upsell dialogs, and trial or discount offer surfaces.")
+    description("Suppresses Nitro upload marketing, picker promotions, upsell buttons, and trial or discount offer surfaces.")
     compatibleWith("com.discord")
 
     execute {
@@ -97,6 +115,20 @@ val removeNitroPromotions = patch("Remove Nitro promotions") {
 
         nitroUpsellButton.replace {
             returnNull()
+        }
+
+        premiumFeatureUpsellPill.replace {
+            returnNull()
+        }
+
+        premiumExpressionPickerSearchUpsell.replace {
+            returnNull()
+        }
+
+        premiumFeatureUpsell.before {
+            whenTrue(Features.isPickerUpsell(param(0))) {
+                returnNull()
+            }
         }
 
         premiumUpsellAlert.replace {
