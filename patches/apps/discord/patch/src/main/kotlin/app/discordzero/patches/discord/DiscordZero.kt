@@ -5,7 +5,6 @@ import app.reseam.patch.after
 import app.reseam.patch.before
 import app.reseam.patch.function
 import app.reseam.patch.patch
-import app.reseam.patch.replace
 
 private val createMessageContent = function {
     name("createMessageContent")
@@ -38,9 +37,9 @@ private val stickerPickerPremiumSearchUpsellModule = function {
     paramCount(7)
 }
 
-private val gifAutoPlayOverride = function {
-    strings("gifAutoPlay")
-    paramCount(0)
+private val userSettingsModule = function {
+    strings("GifAutoPlay", "gifAutoPlay")
+    paramCount(7)
 }
 
 private val avatarUtilsModule = function {
@@ -64,8 +63,8 @@ val staticProfileMedia = patch("Disable automatic profile media animation") {
     compatibleWith("com.discord")
 
     execute {
-        gifAutoPlayOverride.replace {
-            returnFalse()
+        userSettingsModule.after {
+            param(5).assign(Features.disableGifAutoPlay(param(5)))
         }
 
         avatarUtilsModule.after {
