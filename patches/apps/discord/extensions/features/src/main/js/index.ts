@@ -29,3 +29,34 @@ export function hideExport(exports: any, exportName: string) {
 
     return exports;
 }
+
+export function forceStaticAvatarDecoration(exports: any) {
+    if (exports == null || typeof exports !== "object") {
+        return exports;
+    }
+
+    const original = exports.getAvatarDecorationURL;
+    if (typeof original !== "function") {
+        return exports;
+    }
+
+    const staticDecorationURL = function (options: any) {
+        if (options != null && typeof options === "object") {
+            return original({
+                ...options,
+                canAnimate: false,
+            });
+        }
+
+        return original(options);
+    };
+
+    exports.getAvatarDecorationURL = staticDecorationURL;
+
+    const defaultExports = exports.default;
+    if (defaultExports != null && typeof defaultExports === "object") {
+        defaultExports.getAvatarDecorationURL = staticDecorationURL;
+    }
+
+    return exports;
+}
