@@ -9,23 +9,32 @@ import scripts.download_base_apk as downloader
 
 
 class DownloaderTests(unittest.TestCase):
-    def test_mirror_order_and_duplicate_removal(self):
+    def test_current_valenced_mirror_order(self):
         urls = list(downloader.build_mirror_urls("352006"))
         self.assertEqual(
             [name for name, _ in urls],
-            ["tracker", "vendetta-proxy", "k6", "nexpid"],
+            ["ushie-proxy", "vendetta-tracker"],
         )
-        self.assertEqual(len({url for _, url in urls}), 4)
+        self.assertEqual(len({url for _, url in urls}), 2)
+        self.assertTrue(urls[0][1].startswith("https://proxy.vd.ushie.dev/"))
+        self.assertTrue(urls[1][1].startswith("https://tracker.vendetta.rocks/"))
         self.assertTrue(urls[0][1].endswith("/tracker/download/352006/base"))
 
-    def test_rejects_path_injection_in_version(self):
-        for value in ("../latest", "352006?x=1", "352006/base", ""):
-            with self.subTest(value=value):
-                with self.assertRaises(ValueError):
-                    downloader.validate_version(value)
+    def test_builds_split_url(self):
+        urls = list(downloader.build_mirror_urls("352.6", "config.arm64_v8a"))
+        self.assertTrue(urls[0][1].endswith("/tracker/download/352.6/config.arm64_v8a"))
 
-    def test_accepts_version_with_dot(self):
-        self.assertEqual(downloader.validate_version("352.6"), "352.6")
+    def test_rejects_path_injection(self):
+        for version, split in (
+            ("../latest", "base"),
+            ("352006?x=1", "base"),
+            ("352006", "../base"),
+            ("352006", "base?x=1"),
+            ("", "base"),
+        ):
+            with self.subTest(version=version, split=split):
+                with self.assertRaises(ValueError):
+                    list(downloader.build_mirror_urls(version, split))
 
     def test_validates_apk_zip_and_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -63,9 +72,11 @@ class DownloaderTests(unittest.TestCase):
                     apk.writestr("AndroidManifest.xml", b"manifest")
 
             with patch.object(downloader, "download_from_url", side_effect=fake_download):
-                mirror, digest, size = downloader.download_base("352006", output)
+                mirror, digest, size = downloader.download_split(
+                    "352006", "base", output
+                )
 
-            self.assertEqual(mirror, "vendetta-proxy")
+            self.assertEqual(mirror, "vendetta-tracker")
             self.assertEqual(len(calls), 2)
             self.assertTrue(output.is_file())
             self.assertEqual(size, output.stat().st_size)
