@@ -24,14 +24,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: discordzero-hermes-inspection
+  group: discordzero-hermes-xref
   cancel-in-progress: false
 
 jobs:
   inspect:
     name: Inspect Discord ${{ inputs.version || '352.17' }} Hermes bundle
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -105,38 +105,62 @@ jobs:
           tar -xzf "$RUNNER_TEMP/hermes-decomp.tar.gz" -C "$RUNNER_TEMP/hermes-decomp"
           find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit | grep -q .
 
-      - name: Inspect HBC version, modules, and feature references
+      - name: Inspect HBC version and feature references
         run: |
           set -euo pipefail
           BIN="$(find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit)"
           BUNDLE="build/inspection/index.android.bundle"
-          mkdir -p build/inspection/report
+          REPORT="build/inspection/report"
+          mkdir -p "$REPORT"
 
-          "$BIN" info "$BUNDLE" > build/inspection/report/info.txt
-          "$BIN" modules "$BUNDLE" --limit 30000 > build/inspection/report/modules.txt
-          "$BIN" dump "$BUNDLE" --kind cjs-modules > build/inspection/report/cjs-modules.txt
-          "$BIN" dump "$BUNDLE" --kind strings > build/inspection/report/strings.txt
+          "$BIN" info "$BUNDLE" > "$REPORT/info.txt"
 
-          for query in Nitro Premium Discovery GIF autoplay preload decoration avatarDecoration banner Upsell; do
-            "$BIN" xref "$BUNDLE" --query "$query" \
-              > "build/inspection/report/xref-$query.txt"
+          queries=(
+            "Nitro"
+            "Premium"
+            "Discovery"
+            "GIF"
+            "autoplay"
+            "preload"
+            "decoration"
+            "avatarDecoration"
+            "banner"
+            "Upsell"
+            "getUserTrialOffer"
+            "getUserDiscountOffer"
+            "getNitroFileUploadRolloutEnabled"
+            "useNitroFileUploadRolloutEnabled"
+            "PREMIUM_MARKETING_SURFACE_REACHED_BOTTOM"
+            "guild-upsell-list"
+          )
+
+          for query in "${queries[@]}"; do
+            slug="$(printf '%s' "$query" | tr -c 'A-Za-z0-9_-' '_')"
+            if timeout 120 "$BIN" xref "$BUNDLE" --query "$query" > "$REPORT/xref-$slug.txt"; then
+              :
+            else
+              status=$?
+              if [ "$status" -eq 124 ]; then
+                echo "Timed out after 120 seconds: $query" > "$REPORT/xref-$slug.txt"
+              else
+                echo "xref exited with status $status for: $query" > "$REPORT/xref-$slug.txt"
+              fi
+            fi
           done
 
           {
             echo "Discord version: $DISCORD_VERSION"
             echo "Preferred mirror: $PREFERRED_MIRROR"
             echo
-            cat build/inspection/report/info.txt
+            cat "$REPORT/info.txt"
             echo
-            echo "Module rows: $(wc -l < build/inspection/report/modules.txt)"
-            echo "String rows: $(wc -l < build/inspection/report/strings.txt)"
-            echo "CJS module rows: $(wc -l < build/inspection/report/cjs-modules.txt)"
-          } > build/inspection/report/summary.txt
+            echo "Reference reports: $(find "$REPORT" -name 'xref-*.txt' | wc -l)"
+          } > "$REPORT/summary.txt"
 
       - name: Upload inspection report
         uses: actions/upload-artifact@v4
         with:
-          name: discordzero-${{ inputs.version || '352.17' }}-hermes-inspection
+          name: discordzero-${{ inputs.version || '352.17' }}-hermes-xref
           path: build/inspection/report/
           if-no-files-found: error
           retention-days: 7
