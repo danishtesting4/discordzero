@@ -134,6 +134,17 @@ jobs:
             "Routes"
             "/discovery/servers"
             "/discovery/applications"
+            "MainTabs"
+            "MainNavigator"
+            "TabBar"
+            "DiscoveryTab"
+            "GlobalDiscovery"
+            "GlobalDiscoveryApps"
+            "AppDirectory"
+            "ApplicationDirectory"
+            "GuildDiscoveryCategoryActionCreators"
+            "GuildDiscoveryCategoryStore"
+            "Discover"
           )
 
           for query in "${queries[@]}"; do
@@ -307,6 +318,21 @@ jobs:
             "8711:profile_banner_url_module_alt"
             "1418:avatar_decoration_url_module"
             "25837:get_avatar_decoration_url_body"
+            "19421:global_discovery_featured_manager_module"
+            "17957:guild_discovery_category_actions_module"
+            "17958:guild_discovery_category_actions_module_alt"
+            "1088:global_discovery_apps_module_1088"
+            "1089:global_discovery_apps_module_1089"
+            "12081:application_directory_actions_12081"
+            "12082:application_directory_actions_12082"
+            "12083:application_directory_actions_12083"
+            "12084:application_directory_actions_12084"
+            "12085:application_directory_actions_12085"
+            "12086:application_directory_actions_12086"
+            "12087:application_directory_actions_12087"
+            "12088:application_directory_actions_12088"
+            "12150:application_directory_store_12150"
+            "38673:application_directory_search_38673"
           )
 
           for target in "${targets[@]}"; do
