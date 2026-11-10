@@ -37,6 +37,16 @@ private val stickerPickerPremiumSearchUpsellModule = function {
     paramCount(7)
 }
 
+private val gifAutoPlayOverride = function {
+    strings("gifAutoPlay")
+    paramCount(0)
+}
+
+private val avatarUtilsModule = function {
+    strings("utils/AvatarUtils.tsx")
+    paramCount(7)
+}
+
 val staticChatMedia = patch("Disable automatic chat media animation") {
     description("Disables automatic GIF playback and animated emoji in message content.")
     compatibleWith("com.discord")
@@ -44,6 +54,21 @@ val staticChatMedia = patch("Disable automatic chat media animation") {
     execute {
         createMessageContent.before {
             param(0).assign(Features.withStaticChatMediaOptions(param(0)))
+        }
+    }
+}
+
+val staticProfileMedia = patch("Disable automatic profile media animation") {
+    description("Turns off GIF autoplay for profile banners and uses static avatar-decoration assets; manual banner playback remains available.")
+    compatibleWith("com.discord")
+
+    execute {
+        gifAutoPlayOverride.replace {
+            returnFalse()
+        }
+
+        avatarUtilsModule.after {
+            param(5).assign(Features.forceStaticAvatarDecoration(param(5)))
         }
     }
 }
