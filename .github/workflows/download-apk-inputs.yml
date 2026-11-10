@@ -1,10 +1,10 @@
-name: Download Discord APK inputs
+name: Build universal Discord APK
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Discord Android version (latest stable checked: 352.17)"
+        description: "Discord Android version"
         required: true
         default: "352.17"
         type: string
@@ -16,30 +16,19 @@ on:
         options:
           - ushie-proxy
           - vendetta-tracker
-      abi:
-        description: "Native library ABI split to download"
-        required: true
-        default: "arm64_v8a"
-        type: choice
-        options:
-          - arm64_v8a
-          - armeabi_v7a
-          - x86_64
-          - x86
-          - all
 
 permissions:
   contents: read
 
 concurrency:
-  group: discord-apk-download
+  group: discordzero-universal-build
   cancel-in-progress: false
 
 jobs:
-  download:
-    name: Download Discord ${{ inputs.version }} inputs (${{ inputs.abi }})
+  build-universal:
+    name: Build universal Discord ${{ inputs.version }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Check out DiscordZero
         uses: actions/checkout@v4
@@ -49,48 +38,106 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Download and validate APK splits
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK tools
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: sdkmanager "build-tools;35.0.0"
+
+      - name: Download all original APK splits
         env:
           DISCORD_VERSION: ${{ inputs.version }}
           PREFERRED_MIRROR: ${{ inputs.mirror }}
-          ANDROID_ABI: ${{ inputs.abi }}
         run: |
           set -euo pipefail
-
-          python scripts/download_base_apk.py \
-            --version "$DISCORD_VERSION" \
-            --split base \
-            --mirror "$PREFERRED_MIRROR"
-
-          python scripts/download_base_apk.py \
-            --version "$DISCORD_VERSION" \
-            --split config.en \
-            --mirror "$PREFERRED_MIRROR"
-
-          if [ "$ANDROID_ABI" = "all" ]; then
-            ABIS="arm64_v8a armeabi_v7a x86_64 x86"
-          else
-            ABIS="$ANDROID_ABI"
-          fi
-
-          for abi in $ABIS; do
-            echo "Downloading native library split for $abi"
+          for split in base config.en config.xxhdpi \
+            config.arm64_v8a config.armeabi_v7a config.x86_64 config.x86; do
             python scripts/download_base_apk.py \
               --version "$DISCORD_VERSION" \
-              --split "config.$abi" \
+              --split "$split" \
               --mirror "$PREFERRED_MIRROR"
           done
 
-          python scripts/download_base_apk.py \
-            --version "$DISCORD_VERSION" \
-            --split config.xxhdpi \
-            --mirror "$PREFERRED_MIRROR"
+      - name: Download pinned APKEditor
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/REAndroid/APKEditor/releases/download/V1.4.9/APKEditor-1.4.9.jar" \
+            --output "$RUNNER_TEMP/APKEditor-1.4.9.jar"
+          echo "a9cd40df818845456be6d696de6110c89edf4b0a0580cb83438ed6b25a366e67  $RUNNER_TEMP/APKEditor-1.4.9.jar" | sha256sum --check -
 
-      - name: Write input manifest
+      - name: Merge splits into one standalone APK
+        run: |
+          set -euo pipefail
+          java -Xmx6g -jar "$RUNNER_TEMP/APKEditor-1.4.9.jar" \
+            merge -i build -o build/discordzero-universal-unsigned.apk
+
+      - name: Verify all four native ABIs are present
+        run: |
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          apk = Path("build/discordzero-universal-unsigned.apk")
+          if not apk.is_file() or apk.stat().st_size == 0:
+              raise SystemExit("Merged universal APK was not created.")
+
+          expected = {
+              "arm64-v8a",
+              "armeabi-v7a",
+              "x86_64",
+              "x86",
+          }
+          with zipfile.ZipFile(apk) as archive:
+              names = archive.namelist()
+              present = {
+                  abi for abi in expected
+                  if any(name.startswith(f"lib/{abi}/") for name in names)
+              }
+              bad = archive.testzip()
+              if bad:
+                  raise SystemExit(f"Corrupt ZIP entry: {bad}")
+          missing = expected - present
+          if missing:
+              raise SystemExit(f"Universal APK is missing native ABI libraries: {sorted(missing)}")
+          print(f"Verified native libraries for: {', '.join(sorted(present))}")
+          PY
+
+      - name: Align and sign universal APK
+        env:
+          BUILD_TOOLS: ${{ env.ANDROID_HOME }}/build-tools/35.0.0
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/discordzero-temporary.jks" \
+            -storepass discordzero-temporary \
+            -keypass discordzero-temporary \
+            -alias discordzero \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=DiscordZero Temporary Build"
+          "$BUILD_TOOLS/zipalign" -f -p 4 \
+            build/discordzero-universal-unsigned.apk \
+            build/discordzero-universal-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/discordzero-temporary.jks" \
+            --ks-pass pass:discordzero-temporary \
+            --key-pass pass:discordzero-temporary \
+            --ks-key-alias discordzero \
+            --out build/discordzero-universal.apk \
+            build/discordzero-universal-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs \
+            build/discordzero-universal.apk
+
+      - name: Write build manifest
         env:
           DISCORD_VERSION: ${{ inputs.version }}
           PREFERRED_MIRROR: ${{ inputs.mirror }}
-          ANDROID_ABI: ${{ inputs.abi }}
         run: |
           python - <<'PY'
           import hashlib
@@ -98,38 +145,33 @@ jobs:
           import os
           from pathlib import Path
 
-          selected_abi = os.environ["ANDROID_ABI"]
-          abis = (
-              ["arm64_v8a", "armeabi_v7a", "x86_64", "x86"]
-              if selected_abi == "all"
-              else [selected_abi]
-          )
-          files = sorted(Path("build").glob("*.apk"))
+          apk = Path("build/discordzero-universal.apk")
           manifest = {
               "discord_version": os.environ["DISCORD_VERSION"],
               "preferred_mirror": os.environ["PREFERRED_MIRROR"],
-              "abi_selection": selected_abi,
-              "native_library_abis": abis,
-              "files": [
-                  {
-                      "name": path.name,
-                      "size": path.stat().st_size,
-                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                  }
-                  for path in files
+              "artifact_type": "single-universal-apk",
+              "native_library_abis": [
+                  "arm64-v8a", "armeabi-v7a", "x86_64", "x86"
               ],
+              "apk": {
+                  "name": apk.name,
+                  "size": apk.stat().st_size,
+                  "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+                  "signing": "temporary CI-generated debug certificate",
+              },
           }
-          Path("build/input-manifest.json").write_text(
-              json.dumps(manifest, indent=2) + "\n",
-              encoding="utf-8",
+          Path("build/universal-manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
           )
           print(json.dumps(manifest, indent=2))
           PY
 
-      - name: Upload original APK inputs
+      - name: Upload universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: discord-${{ inputs.version }}-${{ inputs.abi }}-inputs
-          path: build/
+          name: discordzero-${{ inputs.version }}-universal
+          path: |
+            build/discordzero-universal.apk
+            build/universal-manifest.json
           if-no-files-found: error
           retention-days: 7
