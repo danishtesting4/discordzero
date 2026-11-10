@@ -20,9 +20,22 @@ class DownloaderTests(unittest.TestCase):
         self.assertTrue(urls[1][1].startswith("https://tracker.vendetta.rocks/"))
         self.assertTrue(urls[0][1].endswith("/tracker/download/352006/base"))
 
+    def test_can_prefer_vendetta_tracker(self):
+        urls = list(
+            downloader.build_mirror_urls(
+                "352006", preferred_mirror="vendetta-tracker"
+            )
+        )
+        self.assertEqual(
+            [name for name, _ in urls],
+            ["vendetta-tracker", "ushie-proxy"],
+        )
+
     def test_builds_split_url(self):
         urls = list(downloader.build_mirror_urls("352.6", "config.arm64_v8a"))
-        self.assertTrue(urls[0][1].endswith("/tracker/download/352.6/config.arm64_v8a"))
+        self.assertTrue(
+            urls[0][1].endswith("/tracker/download/352.6/config.arm64_v8a")
+        )
 
     def test_rejects_path_injection(self):
         for version, split in (
@@ -71,7 +84,9 @@ class DownloaderTests(unittest.TestCase):
                 with zipfile.ZipFile(destination, "w") as apk:
                     apk.writestr("AndroidManifest.xml", b"manifest")
 
-            with patch.object(downloader, "download_from_url", side_effect=fake_download):
+            with patch.object(
+                downloader, "download_from_url", side_effect=fake_download
+            ):
                 mirror, digest, size = downloader.download_split(
                     "352006", "base", output
                 )
