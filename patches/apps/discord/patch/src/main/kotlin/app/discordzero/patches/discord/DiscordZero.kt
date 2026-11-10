@@ -47,6 +47,11 @@ private val avatarUtilsModule = function {
     paramCount(7)
 }
 
+private val globalDiscoveryFeaturedManagerModule = function {
+    strings("modules/global_discovery_servers/GlobalDiscoveryServersFeaturedSearchManager.tsx")
+    paramCount(7)
+}
+
 val staticChatMedia = patch("Disable automatic chat media animation") {
     description("Disables automatic GIF playback and animated emoji in message content.")
     compatibleWith("com.discord")
@@ -69,6 +74,17 @@ val staticProfileMedia = patch("Disable automatic profile media animation") {
 
         avatarUtilsModule.after {
             param(5).assign(Features.forceStaticAvatarDecoration(param(5)))
+        }
+    }
+}
+
+val disableServerDiscovery = patch("Disable server discovery requests") {
+    description("Disables featured server discovery fetches and their connection-open trigger.")
+    compatibleWith("com.discord")
+
+    execute {
+        globalDiscoveryFeaturedManagerModule.after {
+            param(5).assign(Features.disableDiscoveryManager(param(5)))
         }
     }
 }
