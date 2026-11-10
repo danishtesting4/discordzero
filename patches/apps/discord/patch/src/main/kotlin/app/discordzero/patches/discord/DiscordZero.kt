@@ -54,23 +54,23 @@ val removeNitroPromotions = patch("Remove Nitro promotions") {
 
     execute {
         premiumFeatureUpsellModule.after {
-            param(5).assign(Features.hideExport(param(5), "default"))
+            param(5).assign(Features.hideExport(param(5), string("default")))
         }
 
         premiumExpressionPickerFeatureUpsellModule.after {
-            param(5).assign(Features.hideExport(param(5), "default"))
+            param(5).assign(Features.hideExport(param(5), string("default")))
         }
 
         premiumExpressionPickerSearchUpsellModule.after {
-            param(5).assign(Features.hideExport(param(5), "default"))
+            param(5).assign(Features.hideExport(param(5), string("default")))
         }
 
         emojiPickerPremiumSearchUpsellModule.after {
-            param(5).assign(Features.hideExport(param(5), "PremiumSearchUpsell"))
+            param(5).assign(Features.hideExport(param(5), string("PremiumSearchUpsell")))
         }
 
         stickerPickerPremiumSearchUpsellModule.after {
-            param(5).assign(Features.hideExport(param(5), "default"))
+            param(5).assign(Features.hideExport(param(5), string("default")))
         }
     }
 }
