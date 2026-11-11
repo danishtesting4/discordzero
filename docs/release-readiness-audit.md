@@ -85,6 +85,8 @@ All patches are strictly targeted (`compatibleWith("com.discord")`, 7-param Metr
 
 **`test-unbloat.yml` (arm64 patched path):** strong for validation but single-ABI, depends on prebuilt source artifact (`42805321472`), uses temporary Reseam bundle signing key and temporary APK signing key, no before/after size manifest artifact beyond logs/summary.
 
+**`build-unbloat-abi-apks.yml` (added, unvalidated):** intended 4-ABI patched+locale-trimmed pipeline using stock per-ABI source artifacts (`source_run_id`), Reseam patching, locale trim, `zipalign`/`apksigner` sign+verify, and per-ABI/aggregate manifests with input/output hashes and size comparisons. Uses temporary CI signing only and is not a publish/release workflow; requires successful execution and artifact review.
+
 **`download-apk-inputs.yml` (if used):** not re-audited in detail here; ensure it cannot be mistaken for patched release output.
 
 ## 7. Locale trimming and APK signing/verification
@@ -165,7 +167,7 @@ All patches are strictly targeted (`compatibleWith("com.discord")`, 7-param Metr
 
 1. **Device/runtime validation not performed (blocking):** all Priority 1 and Priority 2 runtime checks in §8 remain unverified, especially invite deep links/codes, create-server/add-server flows, discovery redirects/back navigation, and file uploads (normal/large/over-limit) given removed promo sheet.
 2. **`GUILD_DISCOVERY` (`/guild-discovery`) unresolved:** route not redirected/patched; caller/handler impact not fully proven — must be traced and either safely handled or explicitly accepted with runtime evidence.
-3. **No multi-ABI unbloat release pipeline:** `build-abi-apks.yml` produces stock merged APKs; `test-unbloat.yml` validates only arm64 patched+trimmed build. Missing per-ABI patched artifacts, before/after manifests, and publish-grade verification.
+3. **No validated multi-ABI unbloat release artifacts:** `build-abi-apks.yml` produces stock merged APKs and `test-unbloat.yml` validates only arm64 patched+trimmed builds. `build-unbloat-abi-apks.yml` (workflow_dispatch) was added to patch/trim/align/sign/verify all four ABIs with per-ABI manifests and size comparisons (temporary CI signing only), but it has not yet been executed successfully to produce validated artifacts/manifests.
 4. **Release signing/reproducibility:** audited builds use temporary CI keys (and test-unbloat depends on prior source artifact). Production release requires controlled signing key management and reproducible/pinned inputs.
 5. **CI confirmation for new tests:** `Checks` workflow (Python + JS feature-helper tests) added in `39c5202`, but the initial runs on `39c5202`/PR #1 failed due to over-strict invariant-test assumptions (`test_patch_invariants.py`). A fix was pushed after the audit; a green `Checks` run on the latest branch/PR head is still required.
 6. **Potential UX edge cases (needs runtime confirmation):** `null`-rendered hidden promo components and proxied route redirects could produce blank sheets/unexpected navigation in untested contexts; discovery removal is intentionally partial (featured feed + selected routes).

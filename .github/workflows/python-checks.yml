@@ -9,6 +9,7 @@ on:
       - ".github/workflows/python-checks.yml"
       - ".github/workflows/test-unbloat.yml"
       - ".github/workflows/build-abi-apks.yml"
+      - ".github/workflows/build-unbloat-abi-apks.yml"
       - ".github/workflows/inspect-discord-bundle.yml"
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - ".github/workflows/python-checks.yml"
       - ".github/workflows/test-unbloat.yml"
       - ".github/workflows/build-abi-apks.yml"
+      - ".github/workflows/build-unbloat-abi-apks.yml"
       - ".github/workflows/inspect-discord-bundle.yml"
   workflow_dispatch:
 

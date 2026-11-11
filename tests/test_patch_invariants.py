@@ -9,6 +9,7 @@ TRIM_SCRIPT = ROOT / "scripts/trim_locale_caches.py"
 TEST_UNBLOAT = ROOT / ".github/workflows/test-unbloat.yml"
 INSPECT_WORKFLOW = ROOT / ".github/workflows/inspect-discord-bundle.yml"
 BUILD_ABI_WORKFLOW = ROOT / ".github/workflows/build-abi-apks.yml"
+BUILD_UNBLOAT_ABI_WORKFLOW = ROOT / ".github/workflows/build-unbloat-abi-apks.yml"
 
 
 class PatchInvariantTests(unittest.TestCase):
@@ -148,6 +149,30 @@ class PatchInvariantTests(unittest.TestCase):
         text = INSPECT_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("hermes-decomp-v0.2.4-linux-x86_64.tar.gz", text)
         self.assertIn("6e070410432575698657b38d3497f66fd91c0c00f63880d6776703d81d99b5ac", text)
+
+    def test_unbloat_abi_workflow_covers_patch_trim_sign_verify_and_manifests(self):
+        text = BUILD_UNBLOAT_ABI_WORKFLOW.read_text(encoding="utf-8")
+        required = [
+            "workflow_dispatch",
+            "arm64-v8a", "armeabi-v7a", "x86_64", "x86",
+            '"$RESEAM_BIN" patch',
+            "scripts/trim_locale_caches.py",
+            'zipalign" -f -p 4',
+            'apksigner" sign',
+            'apksigner" verify --verbose',
+            'zipalign" -c -p 4',
+            'aapt" dump badging',
+            "temporary CI-generated certificate",
+            "unbloat-manifest.json",
+            "size_comparison",
+            "input_bytes",
+            "output_bytes",
+            "sha256",
+            "publishable_release_artifact",
+        ]
+        for token in required:
+            with self.subTest(token=token):
+                self.assertIn(token, text)
 
 
 if __name__ == "__main__":
