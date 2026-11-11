@@ -135,9 +135,9 @@ class PatchInvariantTests(unittest.TestCase):
         required = [
             "a9cd40df818845456be6d696de6110c89edf4b0a0580cb83438ed6b25a366e67",
             "APKEditor-1.4.9.jar",
-            "zipalign -f -p 4",
-            "apksigner sign",
-            "apksigner verify --verbose --print-certs",
+            'zipalign" -f -p 4',
+            'apksigner" sign',
+            'apksigner" verify --verbose --print-certs',
             "arm64-v8a", "armeabi-v7a", "x86_64", "x86",
         ]
         for token in required:
