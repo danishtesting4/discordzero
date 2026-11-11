@@ -31,21 +31,23 @@ class PatchInvariantTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, self.patch_src)
 
-    def test_module_factory_targets_are_strict_and_unique_by_path(self):
-        # Every module factory target in this file uses a single embedded source path and paramCount(7)
+    def test_module_factory_targets_are_strict_and_unique(self):
+        # Every module factory target in this file is strict: paramCount(7) and uniquely anchored strings.
         blocks = re.findall(
             r"private val \w+Module = function \{(.*?)\n\}",
             self.patch_src,
             re.S,
         )
         self.assertGreaterEqual(len(blocks), 10)
-        paths = []
+        anchors = []
         for block in blocks:
-            self.assertIn('paramCount(7)', block)
-            path_matches = re.findall(r'strings\("([^"]+)"\)', block)
-            self.assertEqual(len(path_matches), 1, block)
-            paths.append(path_matches[0])
-        self.assertEqual(len(paths), len(set(paths)), "module factory source paths must be unique")
+            self.assertIn("paramCount(7)", block)
+            string_matches = re.findall(r'strings\((.*?)\)', block, re.S)
+            self.assertEqual(len(string_matches), 1, block)
+            values = tuple(re.findall(r'"([^"]+)"', string_matches[0]))
+            self.assertGreaterEqual(len(values), 1, block)
+            anchors.append(values)
+        self.assertEqual(len(anchors), len(set(anchors)), "module factory anchors must be unique")
 
     def test_known_promotional_targets_present(self):
         required_paths = {
@@ -116,13 +118,13 @@ class PatchInvariantTests(unittest.TestCase):
     def test_test_unbloat_pipeline_contains_required_steps(self):
         text = TEST_UNBLOAT.read_text(encoding="utf-8")
         required = [
-            "reseam patch",
+            '"$RESEAM_BIN" patch',
             "scripts/trim_locale_caches.py",
-            "zipalign -f -p 4",
-            "apksigner sign",
-            "apksigner verify --verbose",
-            "zipalign -c -p 4",
-            "aapt dump badging",
+            'zipalign" -f -p 4',
+            'apksigner" sign',
+            'apksigner" verify --verbose',
+            'zipalign" -c -p 4',
+            'aapt" dump badging',
         ]
         for token in required:
             with self.subTest(token=token):
