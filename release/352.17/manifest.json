@@ -1,0 +1,47 @@
+{
+  "discord_version": "352.17",
+  "version_code": 352017,
+  "package_id": "com.discord",
+  "source_workflow_run_id": "42995108843",
+  "source_workflow_url": "https://github.com/danishtesting4/discordzero/actions/runs/42995108843",
+  "source_commit": "8e489cd548aff78ac30611c3ac8974b486409390",
+  "build_date": "2026-11-11T09:27:32Z",
+  "build_type": "testing",
+  "publishable_release_artifact": false,
+  "signing": "temporary CI certificate",
+  "artifacts": [
+    {
+      "abi": "arm64-v8a",
+      "source_filename": "discordzero-352.17-arm64-v8a-unbloat.apk",
+      "destination_filename": "arm64-v8a.apk",
+      "size_bytes": 194743618,
+      "sha256": "723928756f7a7f0d4bc72e8d6c905f7a2554b388ca174a0ab48985ea5a18e43b"
+    },
+    {
+      "abi": "armeabi-v7a",
+      "source_filename": "discordzero-352.17-armeabi-v7a-unbloat.apk",
+      "destination_filename": "armeabi-v7a.apk",
+      "size_bytes": 169450908,
+      "sha256": "407dc5c1b3476ee0163c00864a6f8b10021bde20778b8712cdc0ac5b04ef71f6"
+    },
+    {
+      "abi": "x86",
+      "source_filename": "discordzero-352.17-x86-unbloat.apk",
+      "destination_filename": "x86.apk",
+      "size_bytes": 189209577,
+      "sha256": "367e0e4411e2d7c06fdbc8a1f80b03fcf516b9f0d1f6a6ed6c23ef52d76318f0"
+    },
+    {
+      "abi": "x86_64",
+      "source_filename": "discordzero-352.17-x86_64-unbloat.apk",
+      "destination_filename": "x86_64.apk",
+      "size_bytes": 198896827,
+      "sha256": "7a65f554e97002b6f06bcefafa6c34c60678903fa52062c71a15254f23db2cd5"
+    }
+  ],
+  "notes": [
+    "Patched DiscordZero unbloat APKs (com.discord) from CI run 42995108843.",
+    "Testing inputs only; not production releases.",
+    "Temporary CI signing certificate: cannot install/update over the official Play Store Discord app without replacing the existing package installation (signature mismatch; replacement removes app data/session)."
+  ]
+}
