@@ -69,8 +69,10 @@ jobs:
             "https://cdn.reseam.app/engine/v$version/reseam-linux-x64" \
             --output "$RUNNER_TEMP/reseam"
           chmod +x "$RUNNER_TEMP/reseam"
+          sudo ln -sf "$RUNNER_TEMP/reseam" /usr/local/bin/reseam
+          reseam version || true
           mkdir -p build/bundle-material
-          "$RUNNER_TEMP/reseam" bundle keygen --out build/bundle-material/discordzero-bundle.key \
+          reseam bundle keygen --out build/bundle-material/discordzero-bundle.key \
             | tee "$RUNNER_TEMP/reseam-keygen.txt"
           public_key="$(sed -n 's/.*public key (hex): //p' "$RUNNER_TEMP/reseam-keygen.txt" | tail -n 1)"
           test -n "$public_key"
@@ -82,7 +84,7 @@ jobs:
           set -euo pipefail
           gradle bundle --no-daemon
           public_key="$(cat "$GITHUB_WORKSPACE/build/bundle-material/reseam-public-key.txt")"
-          "$RUNNER_TEMP/reseam" bundle list build/reseam/discordzero.reseam --trust "$public_key"
+          reseam bundle list build/reseam/discordzero.reseam --trust "$public_key"
           mkdir -p "$GITHUB_WORKSPACE/build/bundle-material"
           cp build/reseam/discordzero.reseam "$GITHUB_WORKSPACE/build/bundle-material/discordzero.reseam"
 
