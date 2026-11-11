@@ -57,6 +57,21 @@ private val routeConstantsModule = function {
     paramCount(7)
 }
 
+private val nitroFileUploadUpsellPromoSheetModule = function {
+    strings("modules/premium/file_upload/native/NitroFileUploadUpsellPromoSheet.tsx")
+    paramCount(7)
+}
+
+private val premiumTrialOfferActionSheetModule = function {
+    strings("modules/premium/native/trials/PremiumTrialOfferActionSheet.tsx")
+    paramCount(7)
+}
+
+private val premiumDiscountOfferActionSheetModule = function {
+    strings("modules/premium/native/discounts/PremiumDiscountOfferActionSheet.tsx")
+    paramCount(7)
+}
+
 val staticChatMedia = patch("Disable automatic chat media animation") {
     description("Disables automatic GIF playback and animated emoji in message content.")
     compatibleWith("com.discord")
@@ -127,6 +142,32 @@ val removeNitroPromotions = patch("Remove Nitro promotions") {
         }
 
         stickerPickerPremiumSearchUpsellModule.after {
+            param(5).assign(Features.hideExport(param(5), string("default")))
+        }
+    }
+}
+
+val removeNitroOfferSheets = patch("Remove Nitro offer sheets") {
+    description("Removes premium trial and discount offer action sheets.")
+    compatibleWith("com.discord")
+
+    execute {
+        premiumTrialOfferActionSheetModule.after {
+            param(5).assign(Features.hideExport(param(5), string("default")))
+        }
+
+        premiumDiscountOfferActionSheetModule.after {
+            param(5).assign(Features.hideExport(param(5), string("default")))
+        }
+    }
+}
+
+val removeNitroFileUploadPromo = patch("Remove Nitro file upload upsell promo") {
+    description("Removes the Nitro file upload upsell promo action sheet.")
+    compatibleWith("com.discord")
+
+    execute {
+        nitroFileUploadUpsellPromoSheetModule.after {
             param(5).assign(Features.hideExport(param(5), string("default")))
         }
     }

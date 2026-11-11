@@ -1,16 +1,26 @@
-name: Python checks
+name: Checks
 
 on:
   push:
     paths:
       - "scripts/**"
       - "tests/**"
+      - "patches/**"
       - ".github/workflows/python-checks.yml"
+      - ".github/workflows/test-unbloat.yml"
+      - ".github/workflows/build-abi-apks.yml"
+      - ".github/workflows/build-unbloat-abi-apks.yml"
+      - ".github/workflows/inspect-discord-bundle.yml"
   pull_request:
     paths:
       - "scripts/**"
       - "tests/**"
+      - "patches/**"
       - ".github/workflows/python-checks.yml"
+      - ".github/workflows/test-unbloat.yml"
+      - ".github/workflows/build-abi-apks.yml"
+      - ".github/workflows/build-unbloat-abi-apks.yml"
+      - ".github/workflows/inspect-discord-bundle.yml"
   workflow_dispatch:
 
 permissions:
@@ -19,7 +29,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -29,8 +39,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Compile Python files
         run: python -m compileall -q scripts tests
 
-      - name: Run tests
-        run: python -m unittest discover -s tests -v
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Run feature helper tests
+        run: node --test --experimental-strip-types tests/test_feature_helpers.test.mjs

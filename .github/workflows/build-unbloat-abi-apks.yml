@@ -1,0 +1,390 @@
+name: Build DiscordZero unbloat APKs (per ABI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Discord Android version"
+        required: true
+        default: "352.17"
+        type: string
+      source_run_id:
+        description: "Successful stock per-ABI build run containing source APK artifacts"
+        required: true
+        default: "42805321472"
+        type: string
+      keep_locales:
+        description: "Comma-separated locale tags to keep in compiled locale caches"
+        required: true
+        default: "enGB,id"
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: discordzero-unbloat-abi-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-bundle:
+    name: Build patch bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Check out DiscordZero
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.6.1"
+
+      - name: Install Android platform
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" "platforms;android-36"
+
+      - name: Install Reseam CLI and generate temporary bundle key
+        run: |
+          set -euo pipefail
+          version="$(awk -F'"' '/app.reseam.workspace/ {print $4}' patches/settings.gradle.kts)"
+          test -n "$version"
+          curl --fail --location --retry 3 \
+            "https://cdn.reseam.app/engine/v$version/reseam-linux-x64" \
+            --output "$RUNNER_TEMP/reseam"
+          chmod +x "$RUNNER_TEMP/reseam"
+          mkdir -p build/bundle-material
+          "$RUNNER_TEMP/reseam" bundle keygen --out build/bundle-material/discordzero-bundle.key \
+            | tee "$RUNNER_TEMP/reseam-keygen.txt"
+          public_key="$(sed -n 's/.*public key (hex): //p' "$RUNNER_TEMP/reseam-keygen.txt" | tail -n 1)"
+          test -n "$public_key"
+          printf '%s' "$public_key" > build/bundle-material/reseam-public-key.txt
+
+      - name: Build and inspect patch bundle
+        working-directory: patches
+        run: |
+          set -euo pipefail
+          gradle bundle --no-daemon
+          public_key="$(cat "$GITHUB_WORKSPACE/build/bundle-material/reseam-public-key.txt")"
+          "$RUNNER_TEMP/reseam" bundle list build/reseam/discordzero.reseam --trust "$public_key"
+          mkdir -p "$GITHUB_WORKSPACE/build/bundle-material"
+          cp build/reseam/discordzero.reseam "$GITHUB_WORKSPACE/build/bundle-material/discordzero.reseam"
+
+      - name: Upload patch bundle and temporary bundle material (CI only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: discordzero-${{ inputs.version || '352.17' }}-unbloat-bundle
+          path: |
+            build/bundle-material/discordzero.reseam
+            build/bundle-material/reseam-public-key.txt
+            build/bundle-material/discordzero-bundle.key
+          if-no-files-found: error
+          retention-days: 1
+
+  patch-abi:
+    name: Patch ${{ matrix.abi }}
+    needs: prepare-bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+          - abi: armeabi-v7a
+          - abi: x86_64
+          - abi: x86
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      DISCORD_VERSION: ${{ inputs.version || '352.17' }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id || '42805321472' }}
+      KEEP_LOCALES: ${{ inputs.keep_locales || 'enGB,id' }}
+      ABI: ${{ matrix.abi }}
+    steps:
+      - name: Check out DiscordZero
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android build tools
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/zipalign"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
+
+      - name: Download source stock ABI APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: discordzero-${{ env.DISCORD_VERSION }}-${{ matrix.abi }}
+          path: build/source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+
+      - name: Download patch bundle and temporary bundle material
+        uses: actions/download-artifact@v4
+        with:
+          name: discordzero-${{ env.DISCORD_VERSION }}-unbloat-bundle
+          path: build/bundle
+
+      - name: Install Reseam CLI
+        run: |
+          set -euo pipefail
+          version="$(awk -F'"' '/app.reseam.workspace/ {print $4}' patches/settings.gradle.kts)"
+          test -n "$version"
+          curl --fail --location --retry 3 \
+            "https://cdn.reseam.app/engine/v$version/reseam-linux-x64" \
+            --output "$RUNNER_TEMP/reseam"
+          chmod +x "$RUNNER_TEMP/reseam"
+          echo "RESEAM_BIN=$RUNNER_TEMP/reseam" >> "$GITHUB_ENV"
+
+      - name: Record input APK metadata and apply patches
+        run: |
+          set -euo pipefail
+          INPUT="build/source/discordzero-${ABI}.apk"
+          PATCHED="build/discordzero-${DISCORD_VERSION}-${ABI}-patched.apk"
+          BUNDLE="build/bundle/discordzero.reseam"
+          test -s "$INPUT"
+          test -s "$BUNDLE"
+          public_key="$(cat build/bundle/reseam-public-key.txt)"
+          test -n "$public_key"
+
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          abi = os.environ['ABI']
+          inp = Path(f'build/source/discordzero-{abi}.apk')
+          meta = {
+            'path': str(inp),
+            'size': inp.stat().st_size,
+            'sha256': hashlib.sha256(inp.read_bytes()).hexdigest(),
+          }
+          Path('build/input-meta.json').write_text(json.dumps(meta, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(meta, indent=2))
+          PY
+
+          "$RESEAM_BIN" patch "$INPUT" \
+            --bundle "$BUNDLE" \
+            --trust "$public_key" \
+            --output "$PATCHED"
+          test -s "$PATCHED"
+
+      - name: Trim unused locale caches
+        run: |
+          set -euo pipefail
+          python scripts/trim_locale_caches.py \
+            --input "build/discordzero-${DISCORD_VERSION}-${ABI}-patched.apk" \
+            --output "build/discordzero-${DISCORD_VERSION}-${ABI}-unsigned.apk" \
+            --keep-locales "$KEEP_LOCALES" \
+            --summary "build/${ABI}-locale-trim-summary.json"
+          cat "build/${ABI}-locale-trim-summary.json"
+
+      - name: Align, sign (temporary CI), and verify APK
+        run: |
+          set -euo pipefail
+          UNSIGNED="build/discordzero-${DISCORD_VERSION}-${ABI}-unsigned.apk"
+          ALIGNED="build/discordzero-${DISCORD_VERSION}-${ABI}-aligned.apk"
+          OUTPUT="build/discordzero-${DISCORD_VERSION}-${ABI}-unbloat.apk"
+          test -s "$UNSIGNED"
+
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/discordzero-temporary.jks" \
+            -storepass discordzero-temporary \
+            -keypass discordzero-temporary \
+            -alias discordzero \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=DiscordZero Temporary Build"
+
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" "$ALIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$RUNNER_TEMP/discordzero-temporary.jks" \
+            --ks-pass pass:discordzero-temporary \
+            --key-pass pass:discordzero-temporary \
+            --ks-key-alias discordzero \
+            --out "$OUTPUT" \
+            "$ALIGNED"
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUTPUT"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$OUTPUT"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$OUTPUT" | head -n 5
+
+      - name: Write per-ABI manifest and size comparison
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          abi = os.environ['ABI']
+          version = os.environ['DISCORD_VERSION']
+          source_run = os.environ['SOURCE_RUN_ID']
+          keep_locales = [x.strip() for x in os.environ['KEEP_LOCALES'].split(',') if x.strip()]
+
+          def apk_meta(path: Path):
+              data = path.read_bytes()
+              return {
+                  'name': path.name,
+                  'size': path.stat().st_size,
+                  'sha256': hashlib.sha256(data).hexdigest(),
+              }
+
+          input_meta = json.loads(Path('build/input-meta.json').read_text(encoding='utf-8'))
+          output_apk = Path(f'build/discordzero-{version}-{abi}-unbloat.apk')
+          output_meta = apk_meta(output_apk)
+          output_meta['signing'] = 'temporary CI-generated certificate (not release signing)'
+          output_meta['verified'] = {
+              'apksigner_verify_verbose': True,
+              'zipalign_check': True,
+              'aapt_badging_checked': True,
+          }
+
+          locale_summary_path = Path(f'build/{abi}-locale-trim-summary.json')
+          locale_summary = json.loads(locale_summary_path.read_text(encoding='utf-8')) if locale_summary_path.exists() else None
+
+          delta = input_meta['size'] - output_meta['size']
+          manifest = {
+              'artifact_type': 'discordzero-unbloat-single-abi-apk',
+              'discord_version': version,
+              'abi': abi,
+              'source_stock_artifact': {
+                  'run_id': source_run,
+                  'artifact_name': f'discordzero-{version}-{abi}',
+                  'apk_name': f'discordzero-{abi}.apk',
+                  'size': input_meta['size'],
+                  'sha256': input_meta['sha256'],
+              },
+              'pipeline': {
+                  'reseam_patch': True,
+                  'locale_trim': True,
+                  'keep_locales': keep_locales,
+                  'zipalign': True,
+                  'apksigner_sign': True,
+                  'apksigner_verify': True,
+                  'release_signed': False,
+              },
+              'output': output_meta,
+              'size_comparison': {
+                  'input_bytes': input_meta['size'],
+                  'output_bytes': output_meta['size'],
+                  'delta_bytes': delta,
+                  'delta_percent_vs_input': round((delta / input_meta['size']) * 100, 4) if input_meta['size'] else None,
+              },
+              'locale_trim_summary': locale_summary,
+              'publishable_release_artifact': False,
+          }
+
+          out = Path(f'build/{abi}-unbloat-manifest.json')
+          out.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Upload unbloat ABI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: discordzero-${{ env.DISCORD_VERSION }}-${{ matrix.abi }}-unbloat
+          path: |
+            build/discordzero-${{ env.DISCORD_VERSION }}-${{ matrix.abi }}-unbloat.apk
+            build/${{ matrix.abi }}-unbloat-manifest.json
+            build/${{ matrix.abi }}-locale-trim-summary.json
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    name: Aggregate manifests
+    needs: patch-abi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DISCORD_VERSION: ${{ inputs.version || '352.17' }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id || '42805321472' }}
+      KEEP_LOCALES: ${{ inputs.keep_locales || 'enGB,id' }}
+    steps:
+      - name: Download per-ABI unbloat artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: discordzero-${{ env.DISCORD_VERSION }}-*-unbloat
+          path: build/unbloat
+          merge-multiple: false
+
+      - name: Build aggregate manifest
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          version = os.environ['DISCORD_VERSION']
+          source_run = os.environ['SOURCE_RUN_ID']
+          keep_locales = [x.strip() for x in os.environ['KEEP_LOCALES'].split(',') if x.strip()]
+          root = Path('build/unbloat')
+          manifests = sorted(root.glob('**/*-unbloat-manifest.json'))
+          if len(manifests) != 4:
+              raise SystemExit(f'Expected 4 per-ABI manifests, found {len(manifests)}: {[str(p) for p in manifests]}')
+          abis = []
+          total_in = 0
+          total_out = 0
+          for path in manifests:
+              data = json.loads(path.read_text(encoding='utf-8'))
+              abis.append(data)
+              total_in += data['source_stock_artifact']['size']
+              total_out += data['output']['size']
+          abis.sort(key=lambda x: x['abi'])
+          aggregate = {
+              'artifact_type': 'discordzero-unbloat-multi-abi-build',
+              'discord_version': version,
+              'source_stock_run_id': source_run,
+              'keep_locales': keep_locales,
+              'abis': abis,
+              'totals': {
+                  'input_bytes': total_in,
+                  'output_bytes': total_out,
+                  'delta_bytes': total_in - total_out,
+              },
+              'signing': 'temporary CI-generated certificate per ABI (not release signing)',
+              'publishable_release_artifact': False,
+          }
+          out = Path('build/unbloat-aggregate-manifest.json')
+          out.write_text(json.dumps(aggregate, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(aggregate, indent=2))
+          PY
+
+      - name: Upload aggregate manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: discordzero-${{ env.DISCORD_VERSION }}-unbloat-aggregate
+          path: build/unbloat-aggregate-manifest.json
+          if-no-files-found: error
+          retention-days: 7
