@@ -71,12 +71,14 @@ jobs:
           chmod +x "$RUNNER_TEMP/reseam"
           sudo ln -sf "$RUNNER_TEMP/reseam" /usr/local/bin/reseam
           reseam version || true
-          mkdir -p build/bundle-material
+          mkdir -p build/bundle-material "$HOME/.reseam"
           reseam bundle keygen --out build/bundle-material/discordzero-bundle.key \
             | tee "$RUNNER_TEMP/reseam-keygen.txt"
           public_key="$(sed -n 's/.*public key (hex): //p' "$RUNNER_TEMP/reseam-keygen.txt" | tail -n 1)"
           test -n "$public_key"
           printf '%s' "$public_key" > build/bundle-material/reseam-public-key.txt
+          cp build/bundle-material/discordzero-bundle.key "$HOME/.reseam/bundle-signing.key"
+          echo "RESEAM_BUNDLE_KEY=$GITHUB_WORKSPACE/build/bundle-material/discordzero-bundle.key" >> "$GITHUB_ENV"
 
       - name: Build and inspect patch bundle
         working-directory: patches
