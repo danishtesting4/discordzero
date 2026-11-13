@@ -13,6 +13,31 @@ on:
         required: true
         default: "42805321472"
         type: string
+      extra_xref_queries:
+        description: "Optional extra xref queries (newline/comma-separated). Appended when xref_queries_mode=builtin,extra."
+        required: false
+        default: ""
+        type: string
+      extra_decompile_function_ids:
+        description: "Optional extra decompile targets (newline/comma/space-separated). Accepts 'id' or 'id:label'."
+        required: false
+        default: ""
+        type: string
+      decompile_targets:
+        description: "Decompile target set: builtin (default), extra, or builtin,extra."
+        required: false
+        default: "builtin"
+        type: string
+      xref_queries_mode:
+        description: "Xref query set: builtin (default) or builtin,extra."
+        required: false
+        default: "builtin"
+        type: string
+      artifact_suffix:
+        description: "Optional suffix for analysis artifact name (e.g. -targeted). Default empty preserves baseline name."
+        required: false
+        default: ""
+        type: string
   push:
     paths:
       - ".github/workflows/inspect-discord-bundle.yml"
@@ -33,6 +58,11 @@ jobs:
     env:
       DISCORD_VERSION: ${{ inputs.version || '352.17' }}
       SOURCE_RUN_ID: ${{ inputs.source_run_id || '42805321472' }}
+      EXTRA_XREF_QUERIES: ${{ inputs.extra_xref_queries || '' }}
+      EXTRA_DECOMPILE_FUNCTION_IDS: ${{ inputs.extra_decompile_function_ids || '' }}
+      DECOMPILE_TARGETS: ${{ inputs.decompile_targets || 'builtin' }}
+      XREF_QUERIES_MODE: ${{ inputs.xref_queries_mode || 'builtin' }}
+      ARTIFACT_SUFFIX: ${{ inputs.artifact_suffix || '' }}
     steps:
       - name: Check out DiscordZero
         uses: actions/checkout@v4
@@ -69,6 +99,14 @@ jobs:
           find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit | grep -q .
 
       - name: Inspect HBC version, feature references, and target functions
+        env:
+          EXTRA_XREF_QUERIES: ${{ env.EXTRA_XREF_QUERIES }}
+          EXTRA_DECOMPILE_FUNCTION_IDS: ${{ env.EXTRA_DECOMPILE_FUNCTION_IDS }}
+          DECOMPILE_TARGETS: ${{ env.DECOMPILE_TARGETS }}
+          XREF_QUERIES_MODE: ${{ env.XREF_QUERIES_MODE }}
+          ARTIFACT_SUFFIX: ${{ env.ARTIFACT_SUFFIX }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           BIN="$(find "$RUNNER_TEMP/hermes-decomp" -type f -name hermes-decomp -print -quit)"
@@ -174,18 +212,39 @@ jobs:
             "DirectoryTabType"
           )
 
+          builtin_query_count=${#queries[@]}
+          extra_query_count=0
+          if [ "${XREF_QUERIES_MODE:-builtin}" = "builtin,extra" ] && [ -n "${EXTRA_XREF_QUERIES:-}" ]; then
+            while IFS= read -r q; do
+              q="$(printf '%s' "$q" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+              [ -z "$q" ] && continue
+              queries+=("$q")
+              extra_query_count=$((extra_query_count + 1))
+            done < <(printf '%s' "$EXTRA_XREF_QUERIES" | tr ',' '\n')
+          fi
+
+          printf 'index\tquery\tfile\tstatus\n' > "$REPORT/xref-index.tsv"
+          qi=0
           for query in "${queries[@]}"; do
+            qi=$((qi + 1))
             slug="$(printf '%s' "$query" | tr -c 'A-Za-z0-9_-' '_')"
-            if timeout 120 "$BIN" xref "$BUNDLE" --query "$query" > "$REPORT/xref-$slug.txt"; then
-              :
+            qhash="$(printf '%s' "$query" | sha1sum | cut -c1-8)"
+            xfile=$(printf 'xref-%04d-%s-%s.txt' "$qi" "$slug" "$qhash")
+            if timeout 120 "$BIN" xref "$BUNDLE" --query "$query" > "$REPORT/$xfile"; then
+              xstatus="ok"
             else
               status=$?
               if [ "$status" -eq 124 ]; then
-                echo "Timed out after 120 seconds: $query" > "$REPORT/xref-$slug.txt"
+                xstatus="timeout"
+                echo "Timed out after 120 seconds: $query" > "$REPORT/$xfile"
               else
-                echo "xref exited with status $status for: $query" > "$REPORT/xref-$slug.txt"
+                xstatus="error:$status"
+                echo "xref exited with status $status for: $query" > "$REPORT/$xfile"
               fi
             fi
+            # escape tabs/newlines in query for TSV
+            qsafe="$(printf '%s' "$query" | tr '\t\r\n' '   ')"
+            printf '%s\t%s\t%s\t%s\n' "$qi" "$qsafe" "$xfile" "$xstatus" >> "$REPORT/xref-index.tsv"
           done
 
           targets=(
@@ -395,9 +454,37 @@ jobs:
             "38672:application_directory_tab_module"
           )
 
+          builtin_target_count=${#targets[@]}
+          extra_target_count=0
+          target_set="${DECOMPILE_TARGETS:-builtin}"
+          if [ "$target_set" = "extra" ]; then
+            targets=()
+            builtin_target_count=0
+          fi
+          if { [ "$target_set" = "builtin,extra" ] || [ "$target_set" = "extra" ]; } && [ -n "${EXTRA_DECOMPILE_FUNCTION_IDS:-}" ]; then
+            while IFS= read -r t; do
+              t="$(printf '%s' "$t" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+              [ -z "$t" ] && continue
+              if [[ "$t" != *:* ]]; then
+                id="$t"
+                label="extra_${id}"
+                t="${id}:${label}"
+              fi
+              targets+=("$t")
+              extra_target_count=$((extra_target_count + 1))
+            done < <(printf '%s' "$EXTRA_DECOMPILE_FUNCTION_IDS" | tr ', ' '\n\n')
+          fi
+
+          seen_targets=""
           for target in "${targets[@]}"; do
             id="${target%%:*}"
             label="${target#*:}"
+            label="$(printf '%s' "$label" | tr -c 'A-Za-z0-9_.-' '_')"
+            key="|${id}:${label}|"
+            case "$seen_targets" in
+              *"$key"*) continue ;;
+            esac
+            seen_targets="${seen_targets}${key}"
             if timeout 90 "$BIN" decompile "$BUNDLE" --function "$id" \
               > "$REPORT/function-$id-$label.js" \
               2> "$REPORT/function-$id-$label.log"; then
@@ -412,17 +499,25 @@ jobs:
           {
             echo "Discord version: $DISCORD_VERSION"
             echo "Source build run: $SOURCE_RUN_ID"
+            echo "Source artifact: discordzero-${DISCORD_VERSION}-arm64-v8a"
+            echo "Inspect workflow ref: ${WORKFLOW_REF:-unknown}"
+            echo "Inspect workflow sha: ${WORKFLOW_SHA:-unknown}"
+            echo "Hermes decompiler: v0.2.4 (6e070410432575698657b38d3497f66fd91c0c00f63880d6776703d81d99b5ac)"
+            echo "Xref queries mode: ${XREF_QUERIES_MODE:-builtin} (builtin=${builtin_query_count}, extra=${extra_query_count}, total=${#queries[@]})"
+            echo "Decompile targets: ${DECOMPILE_TARGETS:-builtin} (builtin=${builtin_target_count}, extra=${extra_target_count}, requested_total=${#targets[@]})"
+            echo "Artifact suffix: ${ARTIFACT_SUFFIX:-<none>}"
             echo
             cat "$REPORT/info.txt"
             echo
             echo "Reference reports: $(find "$REPORT" -name 'xref-*.txt' | wc -l)"
             echo "Function decompilations: $(find "$REPORT" -name 'function-*.js' | wc -l)"
+            echo "Xref index: $REPORT/xref-index.tsv"
           } > "$REPORT/summary.txt"
 
       - name: Upload inspection report
         uses: actions/upload-artifact@v4
         with:
-          name: discordzero-${{ inputs.version || '352.17' }}-hermes-analysis
+          name: discordzero-${{ inputs.version || '352.17' }}-hermes-analysis${{ inputs.artifact_suffix || '' }}
           path: build/inspection/report/
           if-no-files-found: error
           retention-days: 7
